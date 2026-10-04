@@ -51,9 +51,9 @@ export default function LedgersPage() {
     return () => clearTimeout(t);
   }, [q, load]);
 
-  function openNew() {
+  function openNew(type: 'customer' | 'supplier' = 'customer') {
     setEditing(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, type });
     setModalOpen(true);
   }
 
@@ -115,9 +115,14 @@ export default function LedgersPage() {
           <p className="page-sub">{total} customers, suppliers & accounts</p>
         </div>
         {canManage && (
-          <button className="btn-primary ml-auto" onClick={openNew}>
-            ＋ New Ledger
-          </button>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <button className="btn-soft" onClick={() => openNew('supplier')}>
+              ＋ New Supplier
+            </button>
+            <button className="btn-primary" onClick={() => openNew('customer')}>
+              ＋ New Customer
+            </button>
+          </div>
         )}
       </div>
 
@@ -189,7 +194,15 @@ export default function LedgersPage() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editing ? 'Edit Ledger' : 'New Ledger'}
+        title={
+          editing
+            ? 'Edit Ledger'
+            : form.type === 'supplier'
+              ? 'New Supplier'
+              : form.type === 'general'
+                ? 'New Ledger'
+                : 'New Customer'
+        }
         footer={
           <>
             <button className="btn-soft" onClick={() => setModalOpen(false)}>Cancel</button>
