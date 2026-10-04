@@ -1,0 +1,482 @@
+import { Router } from 'express';
+import { JobCard } from '../models/JobCard';
+import { Sale } from '../models/Sale';
+import { nextSeq, peekSeq } from '../models/Counter';
+import { asyncHandler, HttpError } from '../middleware';
+import { requireAuth, requirePerm } from '../auth/guard';
+import {
+  advanceSplit,
+  jobCardTotals,
+  lineAmount,
+  num,
+  r2,
+} from '../utils/money';
+
+/** Drop blank rows and coerce every measurement value to a trimmed string. */
+function cleanMeasurementSets(input: JobCardBody['measurementSets']) {
+  if (!Array.isArray(input)) return undefined;
+  return input
+    .map((set) => {
+      const values: Record<string, string> = {};
+      for (const [k, v] of Object.entries(set?.values ?? {})) {
+        if (v === null || v === undefined) continue;
+        const str = String(v).trim();
+        if (str) values[k] = str;
+      }
+      return {
+        profileId: set?.profileId || undefined,
+        name: String(set?.name ?? '').trim(),
+        fabric: set?.fabric,
+        size: set?.size,
+        qty: Math.max(0, num(set?.qty, 1)),
+        values,
+      };
+    })
+    // a row with no name and nothing filled in is just an empty slot
+    .filter((set) => set.name || Object.keys(set.values).length > 0);
+}
+
+export const jobCardRouter = Router();
+
+// Every endpoint below requires a signed-in user.
+jobCardRouter.use(requireAuth);
+
+const DEFAULT_TAX_RATE = 5;
+
+function searchFilter(q?: string) {
+  if (!q) return {};
+  const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  const or: Record<string, unknown>[] = [
+    { ref: rx },
+    { partyName: rx },
+    { phone: rx },
+    { invoiceNo: rx },
+  ];
+  const asNum = Number(q);
+  if (Number.isFinite(asNum) && q.trim() !== '') or.push({ no: asNum });
+  return { $or: or };
+}
+
+interface JobCardBody {
+  bookNo?: number;
+  ref?: string;
+  date?: string;
+  deliveryDate?: string;
+  partyName?: string;
+  phone?: string;
+  ledgerId?: string;
+  isNewCustomer?: boolean;
+  accountsAc?: string;
+  invoiceNo?: string;
+  items?: { code?: string; productName?: string; qty?: number; rate?: number }[];
+  discount?: number;
+  taxRate?: number;
+  measurements?: Record<string, string>;
+  fabric?: string;
+  size?: string;
+  measurementSets?: {
+    profileId?: string;
+    name?: string;
+    fabric?: string;
+    size?: string;
+    qty?: number;
+    values?: Record<string, string>;
+  }[];
+  materialsUsed?: { code?: string; productName?: string; qty?: number; rate?: number }[];
+  materialTotal?: number;
+  jobCost?: number;
+  paymentMode?: 'cash' | 'bank' | 'card';
+  bank?: string;
+  creditCardNo?: string;
+}
+
+/** Build the computed portions of a job card from the request body. */
+function buildComputed(body: JobCardBody) {
+  const taxRate = body.taxRate !== undefined ? num(body.taxRate, DEFAULT_TAX_RATE) : DEFAULT_TAX_RATE;
+  const items = (body.items ?? [])
+    .filter((i) => i && (i.code || i.productName || num(i.qty) || num(i.rate)))
+    .map((i) => ({
+      code: i.code || '',
+      productName: i.productName || '',
+      qty: num(i.qty),
+      rate: num(i.rate),
+      amount: lineAmount(num(i.qty), num(i.rate)),
+    }));
+  const totals = jobCardTotals(items, num(body.discount), taxRate);
+  const materialsUsed = (body.materialsUsed ?? [])
+    .filter((m) => m && (m.code || m.productName || num(m.qty) || num(m.rate)))
+    .map((m) => ({
+      code: m.code || '',
+      productName: m.productName || '',
+      qty: num(m.qty),
+      rate: num(m.rate),
+    }));
+  const materialTotal =
+    body.materialTotal !== undefined
+      ? r2(num(body.materialTotal))
+      : r2(materialsUsed.reduce((s, m) => s + m.qty * m.rate, 0));
+  return { items, totals, materialsUsed, materialTotal, taxRate };
+}
+
+// GET /jobcards?q=&status=&page=&limit=
+jobCardRouter.get(
+  '/',
+  requirePerm('jobcards.view'),
+  asyncHandler(async (req, res) => {
+    const { q, status } = req.query as { q?: string; status?: string };
+    const page = Math.max(num(req.query.page, 1), 1);
+    const limit = Math.min(Math.max(num(req.query.limit, 30), 1), 200);
+    const filter: Record<string, unknown> = { ...searchFilter(q) };
+    if (status) filter.status = status;
+    const [items, total] = await Promise.all([
+      JobCard.find(filter).sort({ no: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      JobCard.countDocuments(filter),
+    ]);
+    res.json({ items, total, page, limit });
+  }),
+);
+
+// GET /jobcards/next -> { no, ref } (peek, does not consume)
+jobCardRouter.get(
+  '/next',
+  requirePerm('jobcards.view'),
+  asyncHandler(async (_req, res) => {
+    const no = await peekSeq('jobcard', 13258);
+    res.json({ no, ref: `fm-${no}` });
+  }),
+);
+
+// GET /jobcards/adjacent?no=13258&dir=prev|next
+jobCardRouter.get(
+  '/adjacent',
+  requirePerm('jobcards.view'),
+  asyncHandler(async (req, res) => {
+    const no = num(req.query.no);
+    const dir = req.query.dir === 'next' ? 'next' : 'prev';
+    const doc = await JobCard.findOne(
+      dir === 'prev' ? { no: { $lt: no } } : { no: { $gt: no } },
+    )
+      .sort({ no: dir === 'prev' ? -1 : 1 })
+      .lean();
+    if (!doc) throw new HttpError(404, 'No further job card');
+    res.json(doc);
+  }),
+);
+
+// GET /jobcards/payments/all -> flattened payment history across job cards
+jobCardRouter.get(
+  '/payments/all',
+  requirePerm('payments.view'),
+  asyncHandler(async (req, res) => {
+    const limit = Math.min(Math.max(num(req.query.limit, 100), 1), 500);
+    const cards = await JobCard.find({ 'payments.0': { $exists: true } })
+      .sort({ updatedAt: -1 })
+      .limit(limit)
+      .lean();
+    const payments = cards.flatMap((c: any) =>
+      ((c.payments ?? []) as any[]).map((p: any) => ({
+        jobCardNo: c.no,
+        jobCardRef: c.ref,
+        jobCardId: c._id,
+        partyName: c.partyName,
+        date: p.date,
+        mode: p.mode,
+        amount: p.amount,
+        bank: p.bank,
+        reference: p.reference,
+        discount: p.discount,
+      })),
+    );
+    payments.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
+    res.json({ items: payments.slice(0, limit) });
+  }),
+);
+
+// POST /jobcards
+jobCardRouter.post(
+  '/',
+  requirePerm('jobcards.create'),
+  asyncHandler(async (req, res) => {
+    const body = (req.body ?? {}) as JobCardBody;
+    const no = await nextSeq('jobcard');
+    const computed = buildComputed(body);
+    const advance = r2(
+      ((body as { advance?: number }).advance !== undefined
+        ? num((body as { advance?: number }).advance)
+        : 0) + 0,
+    );
+    const advSplit = advanceSplit(advance, computed.taxRate);
+    const jobCard = await JobCard.create({
+      no,
+      bookNo: num(body.bookNo, 270),
+      ref: body.ref?.trim() || `fm-${no}`,
+      date: body.date ? new Date(body.date) : new Date(),
+      deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : undefined,
+      partyName: body.partyName?.trim(),
+      phone: body.phone?.trim(),
+      ledgerId: body.ledgerId || undefined,
+      isNewCustomer: !!body.isNewCustomer,
+      accountsAc: body.accountsAc?.trim(),
+      invoiceNo: body.invoiceNo?.trim(),
+      items: computed.items,
+      total: computed.totals.total,
+      discount: computed.totals.discount,
+      tax: computed.totals.tax,
+      netAmount: computed.totals.netAmount,
+      measurements: body.measurements ?? {},
+      fabric: body.fabric,
+      size: body.size,
+      measurementSets: cleanMeasurementSets(body.measurementSets) ?? [],
+      materialsUsed: computed.materialsUsed,
+      materialTotal: computed.materialTotal,
+      jobCost: r2(num(body.jobCost)),
+      advance: advSplit.advance,
+      advanceBeforeTax: advSplit.advanceBeforeTax,
+      advanceTax: advSplit.advanceTax,
+      balance: r2(computed.totals.netAmount - advSplit.advance),
+      paymentMode: body.paymentMode || 'cash',
+      bank: body.bank,
+      creditCardNo: body.creditCardNo,
+      payments: [],
+      status: 'open',
+    });
+    res.status(201).json(jobCard);
+  }),
+);
+
+// GET /jobcards/:id
+jobCardRouter.get(
+  '/:id',
+  requirePerm('jobcards.view'),
+  asyncHandler(async (req, res) => {
+    const doc = await JobCard.findById(req.params.id).lean();
+    if (!doc) throw new HttpError(404, 'Job card not found');
+    res.json(doc);
+  }),
+);
+
+// PUT /jobcards/:id
+jobCardRouter.put(
+  '/:id',
+  requirePerm('jobcards.edit'),
+  asyncHandler(async (req, res) => {
+    const body = (req.body ?? {}) as JobCardBody & { advance?: number };
+    const existing = await JobCard.findById(req.params.id);
+    if (!existing) throw new HttpError(404, 'Job card not found');
+    if (existing.status === 'converted')
+      throw new HttpError(400, 'Converted job cards cannot be edited');
+
+    const computed = buildComputed(body);
+    const paymentsTotal = r2(
+      existing.payments.reduce((s: number, p: any) => s + num(p.amount), 0),
+    );
+    // Advance may also be nudged directly; otherwise it follows recorded payments.
+    const advance =
+      body.advance !== undefined ? r2(num(body.advance)) : paymentsTotal;
+    const advSplit = advanceSplit(advance, computed.taxRate);
+
+    existing.set({
+      bookNo: body.bookNo !== undefined ? num(body.bookNo, 270) : existing.bookNo,
+      ref: body.ref?.trim() || existing.ref,
+      date: body.date ? new Date(body.date) : existing.date,
+      deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : existing.deliveryDate,
+      partyName: body.partyName?.trim() ?? existing.partyName,
+      phone: body.phone?.trim() ?? existing.phone,
+      ledgerId: body.ledgerId !== undefined ? body.ledgerId || undefined : existing.ledgerId,
+      isNewCustomer: body.isNewCustomer !== undefined ? !!body.isNewCustomer : existing.isNewCustomer,
+      accountsAc: body.accountsAc?.trim() ?? existing.accountsAc,
+      invoiceNo: body.invoiceNo?.trim() ?? existing.invoiceNo,
+      items: computed.items,
+      total: computed.totals.total,
+      discount: computed.totals.discount,
+      tax: computed.totals.tax,
+      netAmount: computed.totals.netAmount,
+      measurements: body.measurements ?? existing.measurements,
+      fabric: body.fabric ?? existing.fabric,
+      size: body.size ?? existing.size,
+      measurementSets: cleanMeasurementSets(body.measurementSets) ?? existing.measurementSets,
+      materialsUsed: computed.materialsUsed,
+      materialTotal: computed.materialTotal,
+      jobCost: body.jobCost !== undefined ? r2(num(body.jobCost)) : existing.jobCost,
+      advance: advSplit.advance,
+      advanceBeforeTax: advSplit.advanceBeforeTax,
+      advanceTax: advSplit.advanceTax,
+      balance: r2(computed.totals.netAmount - advSplit.advance),
+      paymentMode: body.paymentMode || existing.paymentMode,
+      bank: body.bank ?? existing.bank,
+      creditCardNo: body.creditCardNo ?? existing.creditCardNo,
+    });
+    await existing.save();
+    res.json(existing);
+  }),
+);
+
+interface PaymentBody {
+  date?: string;
+  mode?: 'cash' | 'bank' | 'card' | 'credit';
+  amount?: number;
+  bank?: string;
+  reference?: string;
+  discount?: number;
+  note?: string;
+  taxRate?: number;
+}
+
+function applyPayment(doc: {
+  payments: { date: Date; mode: string; amount: number; bank?: string; reference?: string; discount: number; note?: string }[];
+  advance: number;
+  advanceBeforeTax: number;
+  advanceTax: number;
+  balance: number;
+  netAmount: number;
+}, p: PaymentBody, taxRate: number) {
+  const amount = r2(num(p.amount));
+  if (amount <= 0 && num(p.discount) <= 0)
+    throw new HttpError(400, 'Payment amount must be greater than zero');
+  doc.payments.push({
+    date: p.date ? new Date(p.date) : new Date(),
+    mode: p.mode || 'cash',
+    amount,
+    bank: p.bank,
+    reference: p.reference,
+    discount: r2(num(p.discount)),
+    note: p.note,
+  });
+  const advSplit = advanceSplit(
+    r2(doc.advance + amount),
+    taxRate,
+  );
+  doc.advance = advSplit.advance;
+  doc.advanceBeforeTax = advSplit.advanceBeforeTax;
+  doc.advanceTax = advSplit.advanceTax;
+  doc.balance = r2(doc.netAmount - advSplit.advance);
+}
+
+// POST /jobcards/:id/payments
+jobCardRouter.post(
+  '/:id/payments',
+  requirePerm('jobcards.payment'),
+  asyncHandler(async (req, res) => {
+    const body = (req.body ?? {}) as PaymentBody;
+    const doc = await JobCard.findById(req.params.id);
+    if (!doc) throw new HttpError(404, 'Job card not found');
+    if (doc.status === 'converted')
+      throw new HttpError(400, 'Job card already converted to sales');
+    applyPayment(doc, body, DEFAULT_TAX_RATE);
+    await doc.save();
+    res.status(201).json(doc);
+  }),
+);
+
+// POST /jobcards/:id/close
+jobCardRouter.post(
+  '/:id/close',
+  requirePerm('jobcards.close'),
+  asyncHandler(async (req, res) => {
+    const doc = await JobCard.findById(req.params.id);
+    if (!doc) throw new HttpError(404, 'Job card not found');
+    if (doc.status !== 'open') throw new HttpError(400, 'Only open job cards can be closed');
+    doc.status = 'closed';
+    doc.closedAt = new Date();
+    await doc.save();
+    res.json(doc);
+  }),
+);
+
+// POST /jobcards/:id/reopen
+jobCardRouter.post(
+  '/:id/reopen',
+  requirePerm('jobcards.close'),
+  asyncHandler(async (req, res) => {
+    const doc = await JobCard.findById(req.params.id);
+    if (!doc) throw new HttpError(404, 'Job card not found');
+    if (doc.status !== 'closed') throw new HttpError(400, 'Only closed job cards can be reopened');
+    doc.status = 'open';
+    doc.closedAt = undefined;
+    await doc.save();
+    res.json(doc);
+  }),
+);
+
+interface ConvertBody {
+  payment?: PaymentBody;
+  paymentType?: 'cash' | 'credit';
+  salesman?: string;
+  billDate?: string;
+  taxRate?: number;
+}
+
+// POST /jobcards/:id/convert -> creates a Sale, marks job card converted
+jobCardRouter.post(
+  '/:id/convert',
+  requirePerm('jobcards.convert'),
+  asyncHandler(async (req, res) => {
+    const body = (req.body ?? {}) as ConvertBody;
+    const doc = await JobCard.findById(req.params.id);
+    if (!doc) throw new HttpError(404, 'Job card not found');
+    if (doc.status === 'converted')
+      throw new HttpError(400, 'Job card already converted to sales');
+
+    const taxRate =
+      body.taxRate !== undefined ? num(body.taxRate, DEFAULT_TAX_RATE) : DEFAULT_TAX_RATE;
+    if (body.payment) applyPayment(doc, body.payment, taxRate);
+
+    const billNo = await nextSeq('sale');
+    const items = (doc.items as any[]).map((i: any) => {
+      const grossAmt = r2(i.amount);
+      const taxAmt = r2(grossAmt * (taxRate / 100));
+      const netAmount = r2(grossAmt + taxAmt);
+      return {
+        code: i.code,
+        productName: i.productName,
+        qty: i.qty,
+        rate: i.rate,
+        netRate: i.qty ? r2(netAmount / i.qty) : 0,
+        discPercent: 0,
+        discAmt: 0,
+        grossAmt,
+        taxPercent: taxRate,
+        taxAmt,
+        netAmount,
+      };
+    });
+    const totQty = r2(items.reduce((s: number, i: any) => s + i.qty, 0));
+    const grossAmount = r2(items.reduce((s: number, i: any) => s + i.grossAmt, 0));
+    const taxAmtTotal = r2(items.reduce((s: number, i: any) => s + i.taxAmt, 0));
+    const netAmount = r2(grossAmount + taxAmtTotal);
+    const advanceAmount = r2(doc.advance);
+
+    const sale = await Sale.create({
+      billNo,
+      billDate: body.billDate ? new Date(body.billDate) : new Date(),
+      saleType: 'retail',
+      paymentType: body.paymentType || (r2(netAmount - advanceAmount) > 0 ? 'credit' : 'cash'),
+      category: 'A',
+      jobCardRef: doc.ref,
+      jobCardId: doc._id,
+      salesman: body.salesman || 'GENERAL',
+      partyName: doc.partyName,
+      phone: doc.phone,
+      ledgerId: doc.ledgerId,
+      items,
+      totQty,
+      grossAmount,
+      discountAmt: 0,
+      additionalDiscount: 0,
+      taxAmt: taxAmtTotal,
+      freight: 0,
+      advanceAmount,
+      netAmount,
+      balance: r2(netAmount - advanceAmount),
+      isReturn: false,
+    });
+
+    doc.status = 'converted';
+    doc.invoiceNo = `B-${billNo}`;
+    await doc.save();
+
+    res.status(201).json({ jobCard: doc, sale });
+  }),
+);

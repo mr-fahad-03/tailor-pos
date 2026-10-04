@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-ink-100 text-ink-800 antialiased;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-ink-300;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-ink-400;
+  }
+  /* Numbers in tables should never jitter as they update. */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-ink-200 bg-white shadow-card;
+  }
+
+  /* --- form controls ---------------------------------------------------- */
+  .input {
+    @apply w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20;
+  }
+  .input-sm {
+    @apply rounded-md px-2 py-1.5 text-[13px];
+  }
+  .label {
+    @apply mb-1 block text-[11px] font-semibold uppercase tracking-wider text-ink-500;
+  }
+
+  /* --- buttons ---------------------------------------------------------- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600;
+  }
+  .btn-soft {
+    @apply btn border border-ink-300 bg-white text-ink-700 hover:border-ink-400 hover:bg-ink-50;
+  }
+  .btn-success {
+    @apply btn bg-brand-700 text-white shadow-sm hover:bg-brand-800;
+  }
+  .btn-danger {
+    @apply btn bg-rose-600 text-white shadow-sm hover:bg-rose-700;
+  }
+  .btn-ghost {
+    @apply btn text-ink-600 hover:bg-ink-100 hover:text-ink-900;
+  }
+
+  /* --- tables ----------------------------------------------------------- */
+  .th {
+    @apply whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-ink-500;
+  }
+  .td {
+    @apply whitespace-nowrap px-3 py-2.5 text-sm text-ink-700;
+  }
+
+  /* --- badges ----------------------------------------------------------- */
+  .badge {
+    @apply inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide;
+  }
+  .badge-open {
+    @apply badge bg-brand-100 text-brand-800;
+  }
+  .badge-closed {
+    @apply badge bg-brass-100 text-brass-800;
+  }
+  .badge-converted {
+    @apply badge bg-ink-200 text-ink-700;
+  }
+  .badge-muted {
+    @apply badge bg-ink-100 text-ink-600;
+  }
+
+  /* --- segmented control ------------------------------------------------ */
+  .seg {
+    @apply inline-flex rounded-lg border border-ink-200 bg-ink-100 p-0.5;
+  }
+  .seg-btn {
+    @apply rounded-md px-3 py-1.5 text-[13px] font-semibold text-ink-500 transition hover:text-ink-900;
+  }
+  .seg-btn-active {
+    @apply rounded-md bg-white px-3 py-1.5 text-[13px] font-semibold text-brand-700 shadow-sm;
+  }
+
+  /* --- page headings ---------------------------------------------------- */
+  .page-title {
+    @apply text-[26px] font-bold leading-tight tracking-[-0.02em] text-ink-950;
+  }
+  .page-sub {
+    @apply mt-1 text-sm text-ink-500;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+  }
+  .print-full {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}
