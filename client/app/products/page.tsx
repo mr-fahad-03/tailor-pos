@@ -236,8 +236,18 @@ export default function ProductsPage() {
         }
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Name *">
+            <TextInput value={form.name} onChange={set('name')} placeholder="e.g. KUWAITI BIG" autoFocus />
+          </Field>
+          <Field label="Use As">
+            <Select value={form.usage} onChange={set('usage')}>
+              <option value="item">Item</option>
+              <option value="material">Material</option>
+              <option value="both">Item / Material</option>
+            </Select>
+          </Field>
           <Field label="Code *">
-            <TextInput value={form.code} onChange={set('code')} placeholder="e.g. 5002" autoFocus className="font-mono uppercase" />
+            <TextInput value={form.code} onChange={set('code')} placeholder="e.g. 5002" className="font-mono uppercase" />
           </Field>
           <Field label="Category">
             <Select value={form.category} onChange={set('category')}>
@@ -245,16 +255,6 @@ export default function ProductsPage() {
               <option value="fabric">Fabric</option>
               <option value="material">Material</option>
             </Select>
-          </Field>
-          <Field label="Use As" className="col-span-2">
-            <Select value={form.usage} onChange={set('usage')}>
-              <option value="item">Item</option>
-              <option value="material">Material</option>
-              <option value="both">Item / Material</option>
-            </Select>
-          </Field>
-          <Field label="Name *" className="col-span-2">
-            <TextInput value={form.name} onChange={set('name')} placeholder="e.g. KUWAITI BIG" />
           </Field>
           <Field label="Rate (AED)">
             <TextInput type="number" value={form.rate} onChange={set('rate')} className="text-right" />
