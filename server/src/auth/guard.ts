@@ -105,3 +105,20 @@ export const requirePerm =
 
 export const can = (req: Request, permission: Permission): boolean =>
   Boolean(req.user?.permissions.includes(permission));
+
+/**
+ * Route guard for things only the owner of the system may see. This is checked
+ * against the role itself, not a permission, so it cannot be handed to another
+ * account from the Users screen.
+ */
+export const requireSuperAdmin = (req: Request, _res: Response, next: NextFunction): void => {
+  if (!req.user) {
+    next(new HttpError(401, 'Sign in to continue'));
+    return;
+  }
+  if (req.user.role !== 'super_admin') {
+    next(new HttpError(403, 'Only a Super Admin can view the change log'));
+    return;
+  }
+  next();
+};

@@ -10,6 +10,7 @@ import { productRouter } from './routes/products';
 import { jobCardRouter } from './routes/jobcards';
 import { saleRouter } from './routes/sales';
 import { dashboardRouter } from './routes/dashboard';
+import { auditRouter } from './routes/audit';
 import { measurementRouter } from './routes/measurements';
 import { errorHandler, notFound } from './middleware';
 import { asyncHandler } from './middleware';
@@ -65,6 +66,7 @@ app.use('/api/jobcards', jobCardRouter);
 app.use('/api/measurements', measurementRouter);
 app.use('/api/sales', saleRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/audit', auditRouter);
 
 app.use('/api', notFound);
 app.use(errorHandler);

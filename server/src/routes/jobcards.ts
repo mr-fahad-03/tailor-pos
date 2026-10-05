@@ -4,6 +4,7 @@ import { Sale } from '../models/Sale';
 import { nextSeq, peekSeq } from '../models/Counter';
 import { asyncHandler, HttpError } from '../middleware';
 import { requireAuth, requirePerm } from '../auth/guard';
+import { diffSnapshots, recordAudit, snapshotJobCard } from '../utils/audit';
 import {
   advanceSplit,
   jobCardTotals,
@@ -11,6 +12,25 @@ import {
   num,
   r2,
 } from '../utils/money';
+
+/**
+ * Prefix for an order's reference. Orders raised before this changed still
+ * carry their old 'fm-' refs, and search matches either.
+ */
+const REF_PREFIX = 'rf';
+
+/** Drop blank material rows and coerce the numbers. */
+function cleanMaterials(input: unknown) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((m: any) => m && (m.code || m.productName || num(m.qty) || num(m.rate)))
+    .map((m: any) => ({
+      code: m.code || '',
+      productName: m.productName || '',
+      qty: num(m.qty),
+      rate: num(m.rate),
+    }));
+}
 
 /** Drop blank rows and coerce every measurement value to a trimmed string. */
 function cleanMeasurementSets(input: JobCardBody['measurementSets']) {
@@ -30,10 +50,14 @@ function cleanMeasurementSets(input: JobCardBody['measurementSets']) {
         size: set?.size,
         qty: Math.max(0, num(set?.qty, 1)),
         values,
+        materials: cleanMaterials((set as { materials?: unknown })?.materials),
       };
     })
-    // a row with no name and nothing filled in is just an empty slot
-    .filter((set) => set.name || Object.keys(set.values).length > 0);
+    // a row with no name, no measurements and no materials is an empty slot
+    .filter(
+      (set) =>
+        set.name || Object.keys(set.values).length > 0 || set.materials.length > 0,
+    );
 }
 
 export const jobCardRouter = Router();
@@ -58,6 +82,8 @@ function searchFilter(q?: string) {
 }
 
 interface JobCardBody {
+  /** Only 'draft' or 'open' may be set from the form. */
+  status?: string;
   bookNo?: number;
   ref?: string;
   date?: string;
@@ -103,18 +129,17 @@ function buildComputed(body: JobCardBody) {
       amount: lineAmount(num(i.qty), num(i.rate)),
     }));
   const totals = jobCardTotals(items, num(body.discount), taxRate);
-  const materialsUsed = (body.materialsUsed ?? [])
-    .filter((m) => m && (m.code || m.productName || num(m.qty) || num(m.rate)))
-    .map((m) => ({
-      code: m.code || '',
-      productName: m.productName || '',
-      qty: num(m.qty),
-      rate: num(m.rate),
-    }));
+  // Legacy orders kept one shared list; materials now sit on each person.
+  const materialsUsed = cleanMaterials(body.materialsUsed);
+  const perPerson = (cleanMeasurementSets(body.measurementSets) ?? []).flatMap(
+    (set) => set.materials,
+  );
   const materialTotal =
     body.materialTotal !== undefined
       ? r2(num(body.materialTotal))
-      : r2(materialsUsed.reduce((s, m) => s + m.qty * m.rate, 0));
+      : r2(
+          [...materialsUsed, ...perPerson].reduce((s, m) => s + m.qty * m.rate, 0),
+        );
   return { items, totals, materialsUsed, materialTotal, taxRate };
 }
 
@@ -142,7 +167,7 @@ jobCardRouter.get(
   requirePerm('jobcards.view'),
   asyncHandler(async (_req, res) => {
     const no = await peekSeq('jobcard', 13258);
-    res.json({ no, ref: `fm-${no}` });
+    res.json({ no, ref: `${REF_PREFIX}-${no}` });
   }),
 );
 
@@ -211,7 +236,7 @@ jobCardRouter.post(
     const jobCard = await JobCard.create({
       no,
       bookNo: num(body.bookNo, 270),
-      ref: body.ref?.trim() || `fm-${no}`,
+      ref: body.ref?.trim() || `${REF_PREFIX}-${no}`,
       date: body.date ? new Date(body.date) : new Date(),
       deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : undefined,
       partyName: body.partyName?.trim(),
@@ -240,7 +265,14 @@ jobCardRouter.post(
       bank: body.bank,
       creditCardNo: body.creditCardNo,
       payments: [],
-      status: 'open',
+      status: body.status === 'draft' ? 'draft' : 'open',
+    });
+    await recordAudit(req, {
+      action: 'create',
+      doc: jobCard,
+      summary: `${jobCard.status === 'draft' ? 'Draft' : 'Order'} ${jobCard.no} created for ${
+        jobCard.partyName || 'no customer'
+      }`,
     });
     res.status(201).json(jobCard);
   }),
@@ -264,9 +296,12 @@ jobCardRouter.put(
   asyncHandler(async (req, res) => {
     const body = (req.body ?? {}) as JobCardBody & { advance?: number };
     const existing = await JobCard.findById(req.params.id);
-    if (!existing) throw new HttpError(404, 'Stitching order not found');
+    if (!existing) throw new HttpError(404, 'Order not found');
     if (existing.status === 'converted')
-      throw new HttpError(400, 'Converted stitching orders cannot be edited');
+      throw new HttpError(400, 'Converted orders cannot be edited');
+
+    // Taken before any field is touched — this is the 'from' side of the log.
+    const before = snapshotJobCard(existing.toObject());
 
     const computed = buildComputed(body);
     const paymentsTotal = r2(
@@ -307,8 +342,17 @@ jobCardRouter.put(
       paymentMode: body.paymentMode || existing.paymentMode,
       bank: body.bank ?? existing.bank,
       creditCardNo: body.creditCardNo ?? existing.creditCardNo,
+      // Finishing a draft is what turns it into a real order. Nothing else may
+      // move the status from here — closing and converting have their own routes.
+      status:
+        existing.status === 'draft' && body.status === 'open' ? 'open' : existing.status,
     });
     await existing.save();
+    await recordAudit(req, {
+      action: 'update',
+      doc: existing,
+      changes: diffSnapshots(before, snapshotJobCard(existing.toObject())),
+    });
     res.json(existing);
   }),
 );
@@ -366,6 +410,13 @@ jobCardRouter.post(
       throw new HttpError(400, 'Stitching order already converted to sales');
     applyPayment(doc, body, DEFAULT_TAX_RATE);
     await doc.save();
+    await recordAudit(req, {
+      action: 'payment',
+      doc,
+      summary: `Payment of ${r2(num(body.amount))} by ${body.mode || 'cash'}${
+        num(body.discount) > 0 ? ` (discount ${r2(num(body.discount))})` : ''
+      }`,
+    });
     res.status(201).json(doc);
   }),
 );
@@ -381,6 +432,7 @@ jobCardRouter.post(
     doc.status = 'closed';
     doc.closedAt = new Date();
     await doc.save();
+    await recordAudit(req, { action: 'close', doc, summary: 'Order closed' });
     res.json(doc);
   }),
 );
@@ -396,6 +448,7 @@ jobCardRouter.post(
     doc.status = 'open';
     doc.closedAt = undefined;
     await doc.save();
+    await recordAudit(req, { action: 'reopen', doc, summary: 'Order reopened' });
     res.json(doc);
   }),
 );
@@ -408,17 +461,11 @@ interface ConvertBody {
   taxRate?: number;
 }
 
-// POST /jobcards/:id/convert -> creates a Sale, marks stitching order converted
-jobCardRouter.post(
-  '/:id/convert',
-  requirePerm('jobcards.convert'),
-  asyncHandler(async (req, res) => {
-    const body = (req.body ?? {}) as ConvertBody;
-    const doc = await JobCard.findById(req.params.id);
-    if (!doc) throw new HttpError(404, 'Stitching order not found');
-    if (doc.status === 'converted')
-      throw new HttpError(400, 'Stitching order already converted to sales');
-
+/**
+ * Turn one order into a sales bill and mark it converted. Shared by the single
+ * and bulk convert routes so both produce exactly the same bill.
+ */
+async function convertToSale(doc: any, body: ConvertBody) {
     const taxRate =
       body.taxRate !== undefined ? num(body.taxRate, DEFAULT_TAX_RATE) : DEFAULT_TAX_RATE;
     if (body.payment) applyPayment(doc, body.payment, taxRate);
@@ -477,6 +524,86 @@ jobCardRouter.post(
     doc.invoiceNo = `B-${billNo}`;
     await doc.save();
 
+    return sale;
+}
+
+// POST /jobcards/:id/convert -> creates a Sale, marks the order converted
+jobCardRouter.post(
+  '/:id/convert',
+  requirePerm('jobcards.convert'),
+  asyncHandler(async (req, res) => {
+    const body = (req.body ?? {}) as ConvertBody;
+    const doc = await JobCard.findById(req.params.id);
+    if (!doc) throw new HttpError(404, 'Order not found');
+    if (doc.status === 'converted') throw new HttpError(400, 'Order already converted to sales');
+    if (doc.status === 'draft')
+      throw new HttpError(400, 'This order is still a draft — finish and save it first');
+
+    const sale = await convertToSale(doc, body);
+    await recordAudit(req, {
+      action: 'convert',
+      doc,
+      summary: `Converted to sales bill B-${sale.billNo}`,
+    });
     res.status(201).json({ jobCard: doc, sale });
+  }),
+);
+
+interface ConvertBulkBody extends ConvertBody {
+  ids?: unknown;
+}
+
+/**
+ * POST /jobcards/convert-bulk -> convert a selection in one go.
+ *
+ * Each order is converted on its own so one bad row cannot sink the rest; the
+ * response reports per-order outcomes rather than a single pass/fail. Bills are
+ * minted one at a time because each needs its own number from the counter.
+ */
+jobCardRouter.post(
+  '/convert-bulk',
+  requirePerm('jobcards.convert'),
+  asyncHandler(async (req, res) => {
+    const body = (req.body ?? {}) as ConvertBulkBody;
+    const ids = Array.isArray(body.ids) ? body.ids.map(String).filter(Boolean) : [];
+    if (ids.length === 0) throw new HttpError(400, 'Select at least one order to convert');
+    if (ids.length > 100) throw new HttpError(400, 'Convert at most 100 orders at a time');
+
+    const converted: { id: string; no: number; billNo: number }[] = [];
+    const skipped: { id: string; no?: number; reason: string }[] = [];
+
+    for (const id of ids) {
+      try {
+        const doc = await JobCard.findById(id);
+        if (!doc) {
+          skipped.push({ id, reason: 'Order not found' });
+          continue;
+        }
+        if (doc.status === 'converted') {
+          skipped.push({ id, no: doc.no, reason: 'Already converted' });
+          continue;
+        }
+        if (doc.status === 'draft') {
+          skipped.push({ id, no: doc.no, reason: 'Still a draft — finish and save it first' });
+          continue;
+        }
+        if (doc.status !== 'open') {
+          skipped.push({ id, no: doc.no, reason: 'Reopen the order before converting' });
+          continue;
+        }
+        // A bulk run never records a payment — it bills the order as it stands.
+        const sale = await convertToSale(doc, { salesman: body.salesman, taxRate: body.taxRate });
+        await recordAudit(req, {
+          action: 'convert',
+          doc,
+          summary: `Converted to sales bill B-${sale.billNo} (bulk)`,
+        });
+        converted.push({ id, no: doc.no, billNo: sale.billNo });
+      } catch (e) {
+        skipped.push({ id, reason: e instanceof Error ? e.message : 'Convert failed' });
+      }
+    }
+
+    res.json({ converted, skipped });
   }),
 );

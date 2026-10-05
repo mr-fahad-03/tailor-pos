@@ -26,8 +26,8 @@ const NAV: NavGroup[] = [
   {
     section: 'Tailoring',
     items: [
-      { href: '/job-cards', label: 'Stitching', icon: 'jobcards', permission: 'jobcards.view' },
-      { href: '/job-cards/new', label: 'New Stitching', icon: 'plus', permission: 'jobcards.create' },
+      { href: '/job-cards', label: 'All Order', icon: 'jobcards', permission: 'jobcards.view' },
+      { href: '/job-cards/new', label: 'New Order', icon: 'plus', permission: 'jobcards.create' },
     ],
   },
   {
@@ -40,7 +40,11 @@ const NAV: NavGroup[] = [
   {
     section: 'Masters',
     items: [
-      { href: '/ledgers', label: 'Ledgers', icon: 'ledgers', permission: 'ledgers.view' },
+      { href: '/customers', label: 'Customers', icon: 'users', permission: 'ledgers.view' },
+      { href: '/suppliers', label: 'Suppliers', icon: 'ledgers', permission: 'ledgers.view' },
+      { href: '/wholesalers', label: 'Wholesalers', icon: 'ledgers', permission: 'ledgers.view' },
+      { href: '/measurements', label: 'Measurements', icon: 'scissors', permission: 'jobcards.view' },
+      { href: '/ledgers', label: 'All Ledgers', icon: 'ledgers', permission: 'ledgers.view' },
       { href: '/products', label: 'Products', icon: 'products', permission: 'products.view' },
     ],
   },

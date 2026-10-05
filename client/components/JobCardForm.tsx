@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { addDaysISO, fmt, fmtDate, num, todayISO, toISODate } from '@/lib/format';
@@ -14,7 +14,7 @@ import {
 import { useSettings } from './SettingsContext';
 import { useToast } from './Toast';
 import { useAuth } from './AuthContext';
-import { MeasurementSets, newSet, type EditableSet } from './MeasurementSets';
+import { MeasurementSets, materialsTotal, newSet, type EditableSet } from './MeasurementSets';
 import {
   Card,
   Checkbox,
@@ -37,15 +37,7 @@ interface ItemRow {
   qty: string;
   rate: string;
 }
-interface MaterialRow {
-  code: string;
-  productName: string;
-  qty: string;
-  rate: string;
-}
-
 const emptyItem = (): ItemRow => ({ code: '', productName: '', qty: '1', rate: '' });
-const emptyMaterial = (): MaterialRow => ({ code: '', productName: '', qty: '1', rate: '' });
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 /**
@@ -54,8 +46,18 @@ const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
  * instead of dropping it.
  */
 function setsFromCard(card?: JobCard | null): EditableSet[] {
+  // Orders saved before materials moved per-person carry one shared list;
+  // hand it to the first person so nothing is lost on the next save.
+  const legacyMaterials = (card?.materialsUsed ?? []).map((m) => ({
+    code: m.code ?? '',
+    productName: m.productName ?? '',
+    qty: m.qty ?? 0,
+    rate: m.rate ?? 0,
+  }));
+
   if (card?.measurementSets?.length) {
-    return card.measurementSets.map((m) =>
+    const anyPerPerson = card.measurementSets.some((m) => (m.materials ?? []).length > 0);
+    return card.measurementSets.map((m, i) =>
       newSet({
         profileId: m.profileId,
         name: m.name ?? '',
@@ -63,6 +65,12 @@ function setsFromCard(card?: JobCard | null): EditableSet[] {
         size: m.size ?? '',
         qty: m.qty ?? 1,
         values: { ...m.values },
+        materials:
+          (m.materials ?? []).length > 0
+            ? m.materials!.map((x) => ({ ...x }))
+            : !anyPerPerson && i === 0
+              ? legacyMaterials
+              : [],
       }),
     );
   }
@@ -75,6 +83,7 @@ function setsFromCard(card?: JobCard | null): EditableSet[] {
         fabric: card?.fabric ?? '',
         size: card?.size ?? '',
         values: legacy,
+        materials: legacyMaterials,
       }),
     ];
   }
@@ -116,19 +125,15 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   const [discount, setDiscount] = useState(String(initial?.discount ?? '0'));
   // One block per person. Old cards carry a single unnamed set, so lift that
   // into the new shape on open rather than losing it.
-  const [sets, setSets] = useState<EditableSet[]>(() => setsFromCard(initial));
+  const [sets, setSets] = useState<EditableSet[]>(() => {
+    const saved = setsFromCard(initial);
+    // Every order is stitched for somebody, so a new one starts with the first
+    // person's block open rather than an empty state. The server drops a block
+    // left wholly blank, so this costs nothing if it goes unused.
+    return saved.length === 0 && mode === 'new' ? [newSet()] : saved;
+  });
   const [fabricConsumption, setFabricConsumption] = useState(
     initial?.measurements?.FABRIC_CONSUMPTION ?? '',
-  );
-  const [materials, setMaterials] = useState<MaterialRow[]>(
-    initial?.materialsUsed?.length
-      ? initial.materialsUsed.map((m) => ({
-          code: m.code ?? '',
-          productName: m.productName ?? '',
-          qty: String(m.qty ?? ''),
-          rate: String(m.rate ?? ''),
-        }))
-      : [emptyMaterial()],
   );
   const [jobCost, setJobCost] = useState(String(initial?.jobCost ?? '0'));
 
@@ -143,7 +148,10 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
   // ---- ui ----
   const [saving, setSaving] = useState(false);
+  /** True once this form has been saved properly — stops a duplicate draft. */
+  const settled = useRef(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [ledgerMode, setLedgerMode] = useState<'search' | 'newCustomer'>('search');
   const [payOpen, setPayOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -160,6 +168,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   const canPay = can('jobcards.payment');
   const canClose = can('jobcards.close');
   const canConvert = can('jobcards.convert');
+  const canAddLedger = can('ledgers.manage');
 
   // New mode: fetch next number
   useEffect(() => {
@@ -191,10 +200,9 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     const advanceBeforeTax = r2(advance / (1 + taxRate / 100));
     const advanceTax = r2(advance - advanceBeforeTax);
     const balance = r2(netAmount - advance);
-    const matRows = materials.map((r) => ({ ...r, qty: num(r.qty), rate: num(r.rate) }));
-    const materialTotal = r2(matRows.reduce((s, r) => s + r.qty * r.rate, 0));
+    const materialTotal = r2(sets.reduce((s, p) => s + materialsTotal(p.materials), 0));
     return { rows, total, discount: d, tax, netAmount, advance, advanceBeforeTax, advanceTax, balance, materialTotal };
-  }, [items, discount, payments, materials, taxRate]);
+  }, [items, discount, payments, sets, taxRate]);
 
   function loadDoc(d: JobCard) {
     setNo(d.no);
@@ -216,11 +224,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     setDiscount(String(d.discount));
     setSets(setsFromCard(d));
     setFabricConsumption(d.measurements?.FABRIC_CONSUMPTION ?? '');
-    setMaterials(
-      d.materialsUsed.length
-        ? d.materialsUsed.map((m) => ({ code: m.code ?? '', productName: m.productName ?? '', qty: String(m.qty), rate: String(m.rate) }))
-        : [emptyMaterial()],
-    );
     setJobCost(String(d.jobCost));
     setPaymentMode(d.paymentMode ?? 'cash');
     setBank(d.bank ?? '');
@@ -258,10 +261,17 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         size: m.size,
         qty: Number(m.qty) || 0,
         values: m.values,
+        materials: (m.materials ?? [])
+          .filter((r) => r.code || r.productName || num(r.qty) || num(r.rate))
+          .map((r) => ({
+            code: r.code,
+            productName: r.productName,
+            qty: num(r.qty),
+            rate: num(r.rate),
+          })),
       })),
-      materialsUsed: materials
-        .filter((r) => r.code || r.productName || num(r.qty) || num(r.rate))
-        .map((r) => ({ code: r.code, productName: r.productName, qty: num(r.qty), rate: num(r.rate) })),
+      // Materials live on each person now; the shared list stays empty.
+      materialsUsed: [],
       materialTotal: calc.materialTotal,
       jobCost: num(jobCost),
       paymentMode,
@@ -305,14 +315,20 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     try {
       if (mode === 'new') {
         const created = await api.jobCards.create(payload());
+        settled.current = true;
         await rememberPeople();
-        toast(`Stitching order ${created.no} saved`);
+        toast(`Order ${created.no} saved`);
         router.push(`/job-cards/${created._id}`);
       } else if (docId) {
-        const updated = await api.jobCards.update(docId, payload());
+        // Saving a draft in full is what promotes it to a real order.
+        const updated = await api.jobCards.update(docId, {
+          ...payload(),
+          ...(status === 'draft' ? { status: 'open' } : {}),
+        });
+        settled.current = true;
         await rememberPeople();
         loadDoc(updated);
-        toast(`Stitching order ${updated.no} updated`);
+        toast(status === 'draft' ? `Draft ${updated.no} saved to orders` : `Order ${updated.no} updated`);
       }
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Save failed', 'error');
@@ -320,6 +336,75 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       setSaving(false);
     }
   }
+
+  /**
+   * Has anything actually been typed? An untouched form must not leave a
+   * draft behind just because someone opened New Order and changed their mind.
+   * The fields the form pre-fills on its own — number, ref, dates, book no —
+   * deliberately do not count.
+   */
+  function hasContent(): boolean {
+    if (partyName.trim() || phone.trim() || accountsAc.trim() || invoiceNo.trim()) return true;
+    if (fabricConsumption.trim()) return true;
+    if (num(discount) || num(jobCost)) return true;
+    if (items.some((r) => r.code.trim() || r.productName.trim() || num(r.rate))) return true;
+    return sets.some(
+      (p) =>
+        p.name.trim() ||
+        (p.fabric ?? '').trim() ||
+        (p.size ?? '').trim() ||
+        Object.values(p.values).some((v) => String(v).trim()) ||
+        (p.materials ?? []).some(
+          (m) => (m.code ?? '').trim() || (m.productName ?? '').trim() || num(m.rate),
+        ),
+    );
+  }
+
+  /**
+   * Leaving a half-filled New Order keeps the work as a draft rather than
+   * throwing it away. Fires from the unmount cleanup, which covers the back
+   * button and every in-app navigation; `settled` stops it running after the
+   * order has already been saved properly.
+   */
+  async function saveDraft() {
+    if (mode !== 'new' || settled.current || !hasContent()) return;
+    settled.current = true;
+    try {
+      await api.jobCards.create({ ...payload(), status: 'draft' });
+    } catch {
+      /* Leaving the page is not the moment to argue about a failed save. */
+    }
+  }
+
+  /**
+   * The unmount cleanup below runs once, so it would otherwise close over the
+   * state as it was on first render — an empty form. Pointing a ref at the
+   * current saveDraft on every render keeps it looking at what was typed.
+   */
+  const draftRef = useRef(saveDraft);
+  draftRef.current = saveDraft;
+  const draftDirty = useRef(hasContent);
+  draftDirty.current = hasContent;
+
+  useEffect(() => {
+    // Covers the back button and every in-app navigation away from the form.
+    return () => {
+      void draftRef.current();
+    };
+  }, []);
+
+  useEffect(() => {
+    // A hard tab close cannot carry the auth header on a beacon, so the
+    // browser's own prompt is the honest option there.
+    const warn = (e: BeforeUnloadEvent) => {
+      if (mode !== 'new' || settled.current || !draftDirty.current()) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
 
   function resetNew() {
     if (mode === 'new') {
@@ -405,14 +490,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     );
   }
 
-  function pickMaterial(i: number, p: Product) {
-    setMaterials((rows) =>
-      rows.map((r, idx) =>
-        idx === i ? { ...r, code: p.code, productName: p.name, rate: String(p.rate) } : r,
-      ),
-    );
-  }
-
   async function searchFind() {
     try {
       const r = await api.jobCards.list(findQ, '', 1, 10);
@@ -424,17 +501,61 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
   const updateItem = (i: number, patch: Partial<ItemRow>) =>
     setItems((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  const updateMaterial = (i: number, patch: Partial<MaterialRow>) =>
-    setMaterials((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+
+  /**
+   * Order items are bound to the people on the order, position by position:
+   * row 1 is what is being stitched for person 1, row 2 for person 2, and so
+   * on. Adding a person adds their row; removing a person takes their row with
+   * them, so the two lists cannot drift out of step. Any rows past the last
+   * person are free — that is where an alteration charge or a loose sale goes.
+   */
+  function changeSets(next: EditableSet[]) {
+    const before = sets;
+    setSets(next);
+
+    setItems((rows) => {
+      let out = [...rows];
+
+      // A person was removed: drop their row so the rest stay aligned.
+      if (next.length < before.length) {
+        const gone = before
+          .map((p, i) => (next.some((n) => n.uid === p.uid) ? -1 : i))
+          .filter((i) => i >= 0);
+        out = out.filter((_, i) => !gone.includes(i));
+      }
+
+      // A person was added: insert a fresh row at the end of the bound block,
+      // pushing any free rows below it down. Reusing a free row instead would
+      // quietly turn someone's alteration charge into the new person's line.
+      if (next.length > before.length) {
+        const at = Math.min(before.length, out.length);
+        const added = Array.from({ length: next.length - before.length }, emptyItem);
+        out = [...out.slice(0, at), ...added, ...out.slice(at)];
+      }
+
+      // An order loaded with fewer rows than people still gets one each.
+      while (out.length < next.length) out.push(emptyItem());
+
+      // Stitching two thobes for someone means two of that line.
+      return out.map((r, i) => {
+        const person = next[i];
+        const was = before[i];
+        if (person && was && person.uid === was.uid && person.qty !== was.qty) {
+          return { ...r, qty: String(person.qty ?? 1) };
+        }
+        return r;
+      });
+    });
+  }
 
   return (
     <div>
       {/* header */}
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="page-title">Stitching Entry</h1>
+          <h1 className="page-title">{mode === 'new' ? 'New Order' : 'Edit Order'}</h1>
           <p className="page-sub">
-            {mode === 'new' ? 'Create a new tailoring order' : `Editing stitching order ${no ?? ''}`}
+            {mode === 'new' ? 'Create a new tailoring order' : `Editing order ${no ?? ''}`}
           </p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -442,7 +563,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
           <button className="btn-soft" onClick={resetNew} title="Start a new entry">New</button>
           {canSave && (
             <button className="btn-primary" onClick={save} disabled={saving || readOnly}>
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? 'Saving…' : mode === 'new' || status === 'draft' ? 'Save to Orders' : 'Update Order'}
             </button>
           )}
           {mode === 'edit' && (
@@ -454,68 +575,91 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         </div>
       </div>
 
+      {status === 'draft' && (
+        <div className="mb-5 rounded-2xl border border-brass-200 bg-brass-50 px-5 py-3 text-sm font-semibold text-brass-800">
+          This is a draft — it was saved automatically when the form was left part-finished.
+          Fill in what is missing and press <strong>Save to Orders</strong> to make it a real
+          order. It cannot be converted to a sale until then.
+        </div>
+      )}
+
       {readOnly && (
         <div className="mb-5 rounded-2xl border border-brand-200 bg-brand-50 px-5 py-3 text-sm font-semibold text-brand-800">
           This stitching order has been converted to sales{invoiceNo ? ` (Bill ${invoiceNo})` : ''} and is read-only.
         </div>
       )}
 
-      {/* header fields */}
-      <Card className="mb-6 p-5">
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-8">
-          <Field label="No">
-            <TextInput value={no ?? '…'} readOnly className="bg-ink-50 font-bold text-brand-700" />
-          </Field>
-          <Field label="Book No">
-            <NumberInput value={bookNo} onChange={(e) => setBookNo(e.target.value)} disabled={readOnly} />
-          </Field>
-          <Field label="Ref">
-            <TextInput value={ref} onChange={(e) => setRef(e.target.value)} disabled={readOnly} className="font-mono" />
-          </Field>
-          <Field label="&nbsp;">
-            <button className="btn-soft w-full" onClick={() => { setFindOpen(true); setFindQ(''); setFindRows([]); }}>
-              Find
-            </button>
-          </Field>
-          <Field label="Date">
-            <DateInput value={date} onChange={(e) => setDate(e.target.value)} disabled={readOnly} />
-          </Field>
-          <Field label="Delivery Date">
-            <DateInput value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} disabled={readOnly} />
-          </Field>
-          <Field label="Accounts A/c">
-            <TextInput value={accountsAc} onChange={(e) => setAccountsAc(e.target.value)} disabled={readOnly} />
-          </Field>
-          <Field label="Invoice No">
-            <TextInput value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} disabled={readOnly} />
-          </Field>
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Field label="Party A/c (Customer)">
-            <div className="flex gap-2">
-              <TextInput
-                value={partyName}
-                onChange={(e) => { setPartyName(e.target.value); setLedgerId(''); }}
-                disabled={readOnly}
-                placeholder="Select from ledger…"
-                className="font-semibold"
-              />
-              <button className="btn-soft shrink-0" onClick={() => setLedgerOpen(true)} disabled={readOnly} title="Find ledger (F2)" aria-label="Find ledger">
-                <Icon name="search" className="h-[17px] w-[17px]" />
-              </button>
-            </div>
-          </Field>
-          <Field label="Phone">
-            <TextInput value={phone} onChange={(e) => setPhone(e.target.value)} disabled={readOnly} className="font-mono" />
-          </Field>
-          <div className="flex items-end pb-1">
-            <Checkbox label="New (walk-in customer)" checked={isNew} onChange={setIsNew} />
-          </div>
-        </div>
-      </Card>
-
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">
+          {/* header fields */}
+          <Card className="p-5">
+            {/* which order this is */}
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+              <Field label="No">
+                <TextInput value={no ?? '…'} readOnly className="bg-ink-50 font-bold text-brand-700" />
+              </Field>
+              <Field label="Book No">
+                <NumberInput value={bookNo} onChange={(e) => setBookNo(e.target.value)} disabled={readOnly} />
+              </Field>
+              <Field label="Ref">
+                <TextInput value={ref} onChange={(e) => setRef(e.target.value)} disabled={readOnly} className="font-mono" />
+              </Field>
+              <Field label="&nbsp;">
+                <button className="btn-soft w-full" onClick={() => { setFindOpen(true); setFindQ(''); setFindRows([]); }}>
+                  Find
+                </button>
+              </Field>
+              <Field label="Date">
+                <DateInput value={date} onChange={(e) => setDate(e.target.value)} disabled={readOnly} />
+              </Field>
+            </div>
+            {/* who it is for, and when it is due */}
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+              <Field label="Party A/c (Customer)">
+                <div className="flex gap-2">
+                  <TextInput
+                    value={partyName}
+                    onChange={(e) => { setPartyName(e.target.value); setLedgerId(''); }}
+                    disabled={readOnly}
+                    placeholder="Select from ledger…"
+                    className="font-semibold"
+                  />
+                  <button className="btn-soft shrink-0" onClick={() => { setLedgerMode('search'); setLedgerOpen(true); }} disabled={readOnly} title="Find ledger (F2)" aria-label="Find ledger">
+                    <Icon name="search" className="h-[17px] w-[17px]" />
+                  </button>
+                </div>
+              </Field>
+              <Field label="Phone">
+                <TextInput value={phone} onChange={(e) => setPhone(e.target.value)} disabled={readOnly} className="font-mono" />
+              </Field>
+              <Field label="Delivery Date">
+                <DateInput value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} disabled={readOnly} />
+              </Field>
+            </div>
+            {/* bookkeeping references */}
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+              <Field label="Accounts A/c">
+                <TextInput value={accountsAc} onChange={(e) => setAccountsAc(e.target.value)} disabled={readOnly} />
+              </Field>
+              <Field label="Invoice No">
+                <TextInput value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} disabled={readOnly} />
+              </Field>
+              <div className="flex flex-wrap items-end gap-3 pb-1">
+                <Checkbox label="New (walk-in customer)" checked={isNew} onChange={setIsNew} />
+                {canAddLedger && (
+                  <button
+                    className="btn-soft !py-1.5 text-xs"
+                    onClick={() => { setLedgerMode('newCustomer'); setLedgerOpen(true); }}
+                    disabled={readOnly}
+                    title="Add a customer to the ledger and put them on this order"
+                  >
+                    ＋ New customer
+                  </button>
+                )}
+              </div>
+            </div>
+          </Card>
+
           {/* order items */}
           <Card className="p-5">
             <div className="mb-3 flex items-center justify-between">
@@ -544,7 +688,14 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                     const c = calc.rows[i];
                     return (
                       <tr key={i}>
-                        <td className="td text-ink-400">{i + 1}</td>
+                        <td className="td align-top text-ink-400">
+                          {i + 1}
+                          {sets[i] && (
+                            <span className="block max-w-[7rem] truncate text-[10px] font-semibold text-brand-700">
+                              {sets[i].name.trim() || `Person ${i + 1}`}
+                            </span>
+                          )}
+                        </td>
                         <td className="td">
                           <ProductSearchInput
                             value={r.code}
@@ -569,14 +720,23 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                         </td>
                         <td className="td text-right font-bold tabular-nums">{fmt(c?.amount ?? 0)}</td>
                         {!readOnly && (
-                          <td className="td">
-                            <button
-                              className="text-rose-500 hover:text-rose-700"
-                              onClick={() => setItems((rows) => rows.filter((_, idx) => idx !== i))}
-                              title="Remove row"
-                            >
-                              ✕
-                            </button>
+                          <td className="td align-top">
+                            {i < sets.length ? (
+                              <span
+                                className="cursor-help text-ink-300"
+                                title={`This row belongs to ${sets[i].name.trim() || `person ${i + 1}`} — remove that person to remove the row`}
+                              >
+                                🔒
+                              </span>
+                            ) : (
+                              <button
+                                className="text-rose-500 hover:text-rose-700"
+                                onClick={() => setItems((rows) => rows.filter((_, idx) => idx !== i))}
+                                title="Remove row"
+                              >
+                                ✕
+                              </button>
+                            )}
                           </td>
                         )}
                       </tr>
@@ -585,33 +745,13 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 </tbody>
               </table>
             </div>
-            <div className="mt-4 flex justify-end">
-              <div className="w-72 space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-ink-500">Total</span>
-                  <span className="font-bold tabular-nums">{fmt(calc.total)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="font-medium text-ink-500">Discount</span>
-                  <NumberInput value={discount} onChange={(e) => setDiscount(e.target.value)} disabled={readOnly} className="input-sm !w-32" />
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-ink-500">Tax ({fmt(taxRate)}%)</span>
-                  <span className="font-bold tabular-nums">{fmt(calc.tax)}</span>
-                </div>
-                <div className="flex items-center justify-between rounded-xl bg-brand-700 px-4 py-2.5 text-white">
-                  <span className="text-sm font-bold">Net Amt</span>
-                  <span className="text-lg font-black tabular-nums">{fmt(calc.netAmount)}</span>
-                </div>
-              </div>
-            </div>
           </Card>
 
           {/* measurements — one block per person on this order */}
           <Card className="p-5">
             <MeasurementSets
               sets={sets}
-              onChange={setSets}
+              onChange={changeSets}
               ledgerId={ledgerId || undefined}
               readOnly={readOnly}
             />
@@ -620,72 +760,8 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 <TextInput value={fabricConsumption} onChange={(e) => setFabricConsumption(e.target.value)} disabled={readOnly} />
               </Field>
             </div>
-          </Card>
 
-          {/* materials */}
-          <Card className="p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-extrabold tracking-tight text-ink-900">Materials Used</h2>
-              {!readOnly && (
-                <button className="btn-soft !py-1.5 text-xs" onClick={() => setMaterials((r) => [...r, emptyMaterial()])}>
-                  ＋ Add row
-                </button>
-              )}
-            </div>
-            <div className="overflow-x-auto rounded-xl border border-ink-200">
-              <table className="w-full">
-                <thead className="bg-ink-50">
-                  <tr>
-                    <th className="th w-10">Sl</th>
-                    <th className="th w-36">Code</th>
-                    <th className="th">Product Name</th>
-                    <th className="th w-24 text-right">Qty</th>
-                    <th className="th w-28 text-right">Rate</th>
-                    {!readOnly && <th className="th w-10" />}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-ink-100">
-                  {materials.map((r, i) => (
-                    <tr key={i}>
-                      <td className="td text-ink-400">{i + 1}</td>
-                      <td className="td">
-                        <ProductSearchInput
-                          value={r.code}
-                          onChange={(v) => updateMaterial(i, { code: v })}
-                          onPick={(p) => pickMaterial(i, p)}
-                        />
-                      </td>
-                      <td className="td">
-                        <TextInput
-                          value={r.productName}
-                          onChange={(e) => updateMaterial(i, { productName: e.target.value })}
-                          disabled={readOnly}
-                          className="input-sm"
-                          placeholder="Material"
-                        />
-                      </td>
-                      <td className="td">
-                        <NumberInput value={r.qty} onChange={(e) => updateMaterial(i, { qty: e.target.value })} disabled={readOnly} className="input-sm" />
-                      </td>
-                      <td className="td">
-                        <NumberInput value={r.rate} onChange={(e) => updateMaterial(i, { rate: e.target.value })} disabled={readOnly} className="input-sm" />
-                      </td>
-                      {!readOnly && (
-                        <td className="td">
-                          <button
-                            className="text-rose-500 hover:text-rose-700"
-                            onClick={() => setMaterials((rows) => rows.filter((_, idx) => idx !== i))}
-                          >
-                            ✕
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-4 flex flex-wrap items-end justify-end gap-4">
+            <div className="mt-6 flex flex-wrap items-end justify-end gap-4 border-t border-ink-100 pt-5">
               <Field label="Material Total" className="w-40">
                 <TextInput value={fmt(calc.materialTotal)} readOnly className="bg-ink-50 text-right font-bold tabular-nums" />
               </Field>
@@ -698,8 +774,30 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
         {/* right payment panel */}
         <div>
-          <Card className="sticky top-24 p-5">
-            <h2 className="mb-4 text-base font-extrabold tracking-tight text-ink-900">Payment</h2>
+          <Card className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto p-5">
+            {/* what the order comes to — the figures the payment below settles */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-ink-500">Total</span>
+                <span className="font-bold tabular-nums">{fmt(calc.total)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-medium text-ink-500">Discount</span>
+                <NumberInput value={discount} onChange={(e) => setDiscount(e.target.value)} disabled={readOnly} className="input-sm !w-32" />
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-ink-500">Tax ({fmt(taxRate)}%)</span>
+                <span className="font-bold tabular-nums">{fmt(calc.tax)}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-xl bg-brand-700 px-4 py-2.5 text-white">
+                <span className="text-sm font-bold">Net Amt</span>
+                <span className="text-lg font-black tabular-nums">{fmt(calc.netAmount)}</span>
+              </div>
+            </div>
+
+            <h2 className="mb-4 mt-5 border-t border-ink-100 pt-5 text-base font-extrabold tracking-tight text-ink-900">
+              Payment
+            </h2>
             <div className="space-y-2.5">
               <div className="flex items-center justify-between rounded-xl bg-ink-50 px-4 py-2.5">
                 <span className="label !mb-0">Advance</span>
@@ -769,16 +867,46 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
             </div>
             )}
 
-            {canConvert && (
-              <button
-                className="btn-success mt-4 w-full"
-                onClick={() => setConvertOpen(true)}
-                disabled={readOnly || status === 'closed'}
-                title={status === 'closed' ? 'Reopen the card before converting' : 'Convert to sales bill'}
-              >
-                Convert to Sales →
-              </button>
-            )}
+            {/*
+              A new order can only be saved; an existing one can be updated and,
+              separately, billed. Both live here so the primary action is beside
+              the figures it commits.
+            */}
+            {mode === 'new'
+              ? canSave && (
+                  <button
+                    className="btn-primary mt-4 w-full"
+                    onClick={save}
+                    disabled={saving || readOnly}
+                  >
+                    {saving ? 'Saving…' : 'Save to Orders'}
+                  </button>
+                )
+              : (canSave || canConvert) && (
+                  <div className="mt-4 grid gap-2">
+                    {canSave && (
+                      <button className="btn-primary w-full" onClick={save} disabled={saving || readOnly}>
+                        {saving ? 'Saving…' : status === 'draft' ? 'Save to Orders' : 'Update Order'}
+                      </button>
+                    )}
+                    {canConvert && (
+                      <button
+                        className="btn-success w-full"
+                        onClick={() => setConvertOpen(true)}
+                        disabled={readOnly || status === 'closed' || status === 'draft'}
+                        title={
+                          status === 'draft'
+                            ? 'Finish the draft and save it to orders before converting'
+                            : status === 'closed'
+                              ? 'Reopen the order before converting'
+                              : 'Convert to sales bill'
+                        }
+                      >
+                        Convert to Sales →
+                      </button>
+                    )}
+                  </div>
+                )}
             {mode === 'edit' && (
               <p className="mt-3 text-center text-[11px] text-ink-400">
                 Delivery {fmtDate(deliveryDate)} · Ref {ref}
@@ -789,7 +917,13 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       </div>
 
       {/* modals */}
-      <LedgerSearchModal open={ledgerOpen} onClose={() => setLedgerOpen(false)} onSelect={pickLedger} />
+      <LedgerSearchModal
+        open={ledgerOpen}
+        onClose={() => setLedgerOpen(false)}
+        onSelect={pickLedger}
+        startIn={ledgerMode}
+        seedName={partyName}
+      />
 
       <PaymentDialog
         open={payOpen}
@@ -859,7 +993,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         <div className="mb-4 flex gap-2">
           <TextInput
             autoFocus
-            placeholder="e.g. 13258 or fm-13051 or TARAK"
+            placeholder="e.g. 13258 or rf-13051 or TARAK"
             value={findQ}
             onChange={(e) => setFindQ(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void searchFind()}

@@ -1,5 +1,7 @@
 import type {
+  AuditEntry,
   AuthUser,
+  BulkConvertResult,
   DashboardSummary,
   FlatPayment,
   JobCard,
@@ -129,6 +131,11 @@ export const api = {
       get<{ items: MeasurementProfile[]; total: number }>(
         `/measurements?ledgerId=${encodeURIComponent(ledgerId)}`,
       ),
+    /** Everyone on file, across customers — the Measurements screen and name suggestions. */
+    search: (q = '', page = 1, limit = 50) =>
+      get<Page<MeasurementProfile>>(
+        `/measurements?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`,
+      ),
     save: (body: Partial<MeasurementProfile>) => post<MeasurementProfile>('/measurements', body),
     update: (id: string, body: Partial<MeasurementProfile>) =>
       put<MeasurementProfile>(`/measurements/${id}`, body),
@@ -138,6 +145,10 @@ export const api = {
   ledgers: {
     list: (q = '', page = 1, limit = 50) =>
       get<Page<Ledger>>(`/ledgers?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`),
+    listByType: (q = '', type = '', page = 1, limit = 50) =>
+      get<Page<Ledger>>(
+        `/ledgers?q=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}&page=${page}&limit=${limit}`,
+      ),
     create: (body: Partial<Ledger>) => post<Ledger>('/ledgers', body),
     update: (id: string, body: Partial<Ledger>) => put<Ledger>(`/ledgers/${id}`, body),
     remove: (id: string) => del<{ ok: boolean }>(`/ledgers/${id}`),
@@ -167,6 +178,8 @@ export const api = {
     reopen: (id: string) => post<JobCard>(`/jobcards/${id}/reopen`),
     convert: (id: string, body: unknown) =>
       post<{ jobCard: JobCard; sale: Sale }>(`/jobcards/${id}/convert`, body),
+    convertBulk: (ids: string[], body: { salesman?: string; taxRate?: number } = {}) =>
+      post<BulkConvertResult>('/jobcards/convert-bulk', { ids, ...body }),
     payments: () => get<{ items: FlatPayment[] }>('/jobcards/payments/all'),
   },
 
@@ -182,7 +195,18 @@ export const api = {
     create: (body: unknown) => post<Sale>('/sales', body),
   },
 
+  audit: {
+    list: (q = '', action = '', page = 1, limit = 50, entityId = '') =>
+      get<Page<AuditEntry>>(
+        `/audit?q=${encodeURIComponent(q)}&action=${encodeURIComponent(action)}` +
+          `&page=${page}&limit=${limit}&entityId=${encodeURIComponent(entityId)}`,
+      ),
+  },
+
   dashboard: {
-    summary: () => get<DashboardSummary>('/dashboard/summary'),
+    summary: (from = '', to = '') =>
+      get<DashboardSummary>(
+        `/dashboard/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      ),
   },
 };

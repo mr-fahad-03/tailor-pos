@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { Types } from 'mongoose';
 import { MeasurementProfile } from '../models/MeasurementProfile';
+import { Ledger } from '../models/Ledger';
 import { asyncHandler, HttpError } from '../middleware';
 import { requireAuth, requirePerm } from '../auth/guard';
 
@@ -20,23 +21,69 @@ function cleanValues(input: unknown): Record<string, string> {
   return out;
 }
 
-// GET /measurements?ledgerId=...&includeArchived=
+/**
+ * Attach the customer each person is filed under.
+ *
+ * Two different customers may each have a person called "Ali", so a name on
+ * its own does not identify anybody — every list that spans customers carries
+ * the owner's name and phone so the right one can be picked.
+ */
+async function withOwners(rows: any[]) {
+  const ids = [...new Set(rows.map((r) => String(r.ledgerId)).filter(Boolean))];
+  const owners = await Ledger.find({ _id: { $in: ids } })
+    .select('name phone type')
+    .lean();
+  const byId = new Map(owners.map((o: any) => [String(o._id), o]));
+  return rows.map((r) => {
+    const owner = byId.get(String(r.ledgerId));
+    return {
+      ...r,
+      ledgerName: owner?.name ?? '',
+      ledgerPhone: owner?.phone ?? '',
+      ledgerType: owner?.type ?? '',
+    };
+  });
+}
+
+// GET /measurements?ledgerId=&q=&page=&limit=&includeArchived=
+// Without ledgerId this lists every person on file, which is what the
+// Measurements screen and the name suggestions both read.
 measurementRouter.get(
   '/',
   requirePerm('jobcards.view'),
   asyncHandler(async (req, res) => {
-    const { ledgerId, includeArchived } = req.query as {
+    const { ledgerId, includeArchived, q } = req.query as {
       ledgerId?: string;
       includeArchived?: string;
+      q?: string;
     };
-    if (!ledgerId) throw new HttpError(400, 'A customer is required to list measurements');
-    if (!Types.ObjectId.isValid(ledgerId)) throw new HttpError(400, 'Invalid customer');
 
-    const filter: Record<string, unknown> = { ledgerId };
+    const filter: Record<string, unknown> = {};
+    if (ledgerId) {
+      if (!Types.ObjectId.isValid(ledgerId)) throw new HttpError(400, 'Invalid customer');
+      filter.ledgerId = ledgerId;
+    }
     if (includeArchived !== 'true') filter.archived = { $ne: true };
 
-    const items = await MeasurementProfile.find(filter).sort({ name: 1 }).lean();
-    res.json({ items, total: items.length });
+    const search = String(q ?? '').trim();
+    if (search) {
+      filter.name = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    }
+
+    // One customer's list is short; the global one is paged.
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || (ledgerId ? 200 : 50)));
+
+    const [rows, total] = await Promise.all([
+      MeasurementProfile.find(filter)
+        .sort(ledgerId ? { name: 1 } : { lastUsedAt: -1, name: 1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      MeasurementProfile.countDocuments(filter),
+    ]);
+
+    res.json({ items: await withOwners(rows), total, page, limit });
   }),
 );
 

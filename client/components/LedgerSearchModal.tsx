@@ -8,16 +8,22 @@ import { Field, Select, TextInput } from './ui';
 import { useToast } from './Toast';
 import { useAuth } from './AuthContext';
 
-type LedgerType = 'customer' | 'supplier' | 'general';
+type LedgerType = 'customer' | 'supplier' | 'wholesaler' | 'general';
 
 export function LedgerSearchModal({
   open,
   onClose,
   onSelect,
+  startIn = 'search',
+  seedName = '',
 }: {
   open: boolean;
   onClose: () => void;
   onSelect: (ledger: Ledger) => void;
+  /** 'newCustomer' skips the search and opens straight on the create form. */
+  startIn?: 'search' | 'newCustomer';
+  /** Pre-fills the name when opening on the create form. */
+  seedName?: string;
 }) {
   const { toast } = useToast();
   const { can } = useAuth();
@@ -43,8 +49,13 @@ export function LedgerSearchModal({
     if (!open) return;
     setQ('');
     setPicked(null);
-    setCreating(false);
     setError('');
+    if (startIn === 'newCustomer') {
+      setForm({ name: seedName.trim(), phone: '', type: 'customer' });
+      setCreating(true);
+      return;
+    }
+    setCreating(false);
     void load('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);

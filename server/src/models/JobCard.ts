@@ -25,7 +25,8 @@ export interface IJobCardPayment {
   note?: string;
 }
 
-export type JobCardStatus = 'open' | 'closed' | 'converted';
+/** 'draft' is an order abandoned part-finished — it is not real work yet. */
+export type JobCardStatus = 'draft' | 'open' | 'closed' | 'converted';
 
 export interface IJobCard extends Document {
   no: number;
@@ -56,6 +57,8 @@ export interface IJobCard extends Document {
     size?: string;
     qty: number;
     values: Record<string, string>;
+    /** Materials consumed for this person. */
+    materials: IJobCardMaterial[];
   }[];
   materialsUsed: IJobCardMaterial[];
   materialTotal: number;
@@ -141,6 +144,7 @@ const jobCardSchema = new Schema<IJobCard>(
             size: { type: String, trim: true },
             qty: { type: Number, default: 1, min: 0 },
             values: { type: Schema.Types.Mixed, default: {} },
+            materials: { type: [materialSchema], default: [] },
           },
           { _id: false },
         ),
@@ -164,7 +168,7 @@ const jobCardSchema = new Schema<IJobCard>(
     payments: { type: [paymentSchema], default: [] },
     status: {
       type: String,
-      enum: ['open', 'closed', 'converted'],
+      enum: ['draft', 'open', 'closed', 'converted'],
       default: 'open',
     },
     closedAt: Date,

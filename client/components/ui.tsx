@@ -152,6 +152,12 @@ export function EmptyState({ title, sub }: { title: string; sub?: string }) {
 
 export function StatusBadge({ status }: { status: string }) {
   const cls =
-    status === 'open' ? 'badge-open' : status === 'closed' ? 'badge-closed' : 'badge-converted';
+    status === 'draft'
+      ? 'badge bg-brass-100 text-brass-800'
+      : status === 'open'
+        ? 'badge-open'
+        : status === 'closed'
+          ? 'badge-closed'
+          : 'badge-converted';
   return <span className={cls}>{status}</span>;
 }

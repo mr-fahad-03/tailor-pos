@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { MEASURE_FIELDS, type MeasurementProfile, type MeasurementSet } from '@/lib/types';
-import { Field, TextInput } from '@/components/ui';
+import { MEASURE_FIELDS, type MaterialLine, type MeasurementProfile, type MeasurementSet, type Product } from '@/lib/types';
+import { Field, NumberInput, TextInput } from '@/components/ui';
+import { ProductSearchInput } from '@/components/ProductSearchInput';
+import { PersonSearchInput } from '@/components/PersonSearchInput';
+import { fmt, num } from '@/lib/format';
 import { Icon } from '@/components/icons';
 import { useToast } from '@/components/Toast';
 
@@ -21,9 +24,22 @@ export const newSet = (over: Partial<EditableSet> = {}): EditableSet => ({
   size: '',
   qty: 1,
   values: {},
+  materials: [blankMaterial()],
   remember: true,
   ...over,
 });
+
+/** One empty row, so a person's materials are always typeable straight away. */
+export const blankMaterial = (): MaterialLine => ({
+  code: '',
+  productName: '',
+  qty: 1,
+  rate: 0,
+});
+
+/** What this person's materials come to. */
+export const materialsTotal = (m?: MaterialLine[]): number =>
+  (m ?? []).reduce((sum, r) => sum + num(r.qty) * num(r.rate), 0);
 
 export function fromProfile(p: MeasurementProfile): EditableSet {
   return newSet({
@@ -85,6 +101,66 @@ export function MeasurementSets({
 
   function remove(uid: string) {
     onChange(sets.filter((s) => s.uid !== uid));
+  }
+
+  /* ---- this person's materials ---------------------------------------- */
+
+  function patchMaterial(uid: string, i: number, change: Partial<MaterialLine>) {
+    onChange(
+      sets.map((s) =>
+        s.uid === uid
+          ? {
+              ...s,
+              materials: (s.materials ?? []).map((m, idx) =>
+                idx === i ? { ...m, ...change } : m,
+              ),
+            }
+          : s,
+      ),
+    );
+  }
+
+  function addMaterial(uid: string) {
+    onChange(
+      sets.map((s) =>
+        s.uid === uid ? { ...s, materials: [...(s.materials ?? []), blankMaterial()] } : s,
+      ),
+    );
+  }
+
+  function removeMaterial(uid: string, i: number) {
+    onChange(
+      sets.map((s) =>
+        s.uid === uid
+          ? { ...s, materials: (s.materials ?? []).filter((_, idx) => idx !== i) }
+          : s,
+      ),
+    );
+  }
+
+  /**
+   * Copy a saved person onto this block. The profile is only linked back when
+   * it belongs to the customer on this order — otherwise the measurements are
+   * copied but left unlinked, so saving cannot overwrite someone else's record.
+   */
+  function applyProfile(uid: string, p: MeasurementProfile) {
+    const sameCustomer = Boolean(ledgerId) && p.ledgerId === ledgerId;
+    patch(uid, {
+      profileId: sameCustomer ? p._id : undefined,
+      name: p.name,
+      fabric: p.fabric ?? '',
+      size: p.size ?? '',
+      values: { ...p.values },
+      remember: sameCustomer,
+    });
+    if (!sameCustomer) {
+      toast(`Copied ${p.name}'s measurements from ${p.ledgerName || 'another customer'}`, 'info');
+    }
+  }
+
+  /** Picking a product fills the code, name and rate in one go. */
+  function pickMaterial(uid: string, i: number, p: Product) {
+    patchMaterial(uid, i, { code: p.code, productName: p.name, rate: p.rate });
   }
 
   /**
@@ -242,13 +318,13 @@ export function MeasurementSets({
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-ink-100 font-mono text-[11px] font-bold text-ink-600">
                     {idx + 1}
                   </span>
-                  <input
+                  <PersonSearchInput
                     value={s.name}
-                    onChange={(e) => patch(s.uid, { name: e.target.value })}
+                    onChange={(v) => patch(s.uid, { name: v })}
+                    onPick={(p) => applyProfile(s.uid, p)}
+                    ledgerId={ledgerId}
                     disabled={readOnly}
-                    placeholder="Person's name"
-                    aria-label="Person's name"
-                    className="input input-sm min-w-0 flex-1 !border-transparent !bg-transparent font-semibold hover:!border-ink-300 focus:!border-brand-500 focus:!bg-white"
+                    className="input input-sm w-full !border-transparent !bg-transparent font-semibold hover:!border-ink-300 focus:!border-brand-500 focus:!bg-white"
                   />
                   <span className="hidden text-[11px] font-medium text-ink-400 sm:inline">
                     {filled}/{MEASURE_FIELDS.length}
@@ -309,6 +385,113 @@ export function MeasurementSets({
                         </Field>
                       ))}
                     </div>
+                    {/* materials for this person, costed here rather than at the end */}
+                    <div className="mt-4 border-t border-ink-100 pt-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <h4 className="text-[11px] font-bold uppercase tracking-wider text-ink-500">
+                          Materials Used
+                        </h4>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[11px] font-semibold text-ink-500">
+                            Total{' '}
+                            <span className="tabular-nums text-ink-800">
+                              {fmt(materialsTotal(s.materials))}
+                            </span>
+                          </span>
+                          {!readOnly && (
+                            <button
+                              type="button"
+                              onClick={() => addMaterial(s.uid)}
+                              className="btn-soft !px-2 !py-1 text-[11px]"
+                            >
+                              ＋ Add row
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {(s.materials ?? []).length === 0 ? (
+                        <p className="rounded-lg bg-ink-50 px-3 py-2.5 text-xs text-ink-500">
+                          No materials recorded for {s.name.trim() || 'this person'}.
+                        </p>
+                      ) : (
+                        <div className="overflow-x-auto rounded-lg border border-ink-200">
+                          <table className="w-full min-w-[480px]">
+                            <thead className="bg-ink-50">
+                              <tr>
+                                <th className="th w-32">Code</th>
+                                <th className="th">Product Name</th>
+                                <th className="th w-20 text-right">Qty</th>
+                                <th className="th w-24 text-right">Rate</th>
+                                <th className="th w-24 text-right">Amount</th>
+                                {!readOnly && <th className="th w-8" />}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-ink-100">
+                              {(s.materials ?? []).map((m, i) => (
+                                <tr key={i}>
+                                  <td className="td !px-2 !py-1.5">
+                                    <ProductSearchInput
+                                      value={m.code ?? ''}
+                                      onChange={(v) => patchMaterial(s.uid, i, { code: v })}
+                                      onPick={(pr) => pickMaterial(s.uid, i, pr)}
+                                      disabled={readOnly}
+                                      placeholder="Code"
+                                    />
+                                  </td>
+                                  <td className="td !px-2 !py-1.5">
+                                    <ProductSearchInput
+                                      value={m.productName ?? ''}
+                                      onChange={(v) => patchMaterial(s.uid, i, { productName: v })}
+                                      onPick={(pr) => pickMaterial(s.uid, i, pr)}
+                                      disabled={readOnly}
+                                      placeholder="Start typing a material…"
+                                      className=""
+                                    />
+                                  </td>
+                                  <td className="td !px-2 !py-1.5">
+                                    <NumberInput
+                                      value={String(m.qty ?? '')}
+                                      onChange={(e) =>
+                                        patchMaterial(s.uid, i, { qty: Number(e.target.value) })
+                                      }
+                                      disabled={readOnly}
+                                      className="input-sm"
+                                    />
+                                  </td>
+                                  <td className="td !px-2 !py-1.5">
+                                    <NumberInput
+                                      value={String(m.rate ?? '')}
+                                      onChange={(e) =>
+                                        patchMaterial(s.uid, i, { rate: Number(e.target.value) })
+                                      }
+                                      disabled={readOnly}
+                                      className="input-sm"
+                                    />
+                                  </td>
+                                  <td className="td !px-2 !py-1.5 text-right font-semibold tabular-nums">
+                                    {fmt(num(m.qty) * num(m.rate))}
+                                  </td>
+                                  {!readOnly && (
+                                    <td className="td !px-2 !py-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => removeMaterial(s.uid, i)}
+                                        aria-label="Remove material row"
+                                        className="text-rose-500 transition hover:text-rose-700"
+                                      >
+                                        ✕
+                                      </button>
+                                    </td>
+                                  )}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
                     {ledgerId && !readOnly && (
                       <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-[13px] text-ink-600">
                         <input

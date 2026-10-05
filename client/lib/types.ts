@@ -5,7 +5,7 @@ export interface Ledger {
   address?: string;
   trn?: string;
   openingBalance: number;
-  type: 'customer' | 'supplier' | 'general';
+  type: 'customer' | 'supplier' | 'wholesaler' | 'general';
 }
 
 export interface Product {
@@ -46,6 +46,14 @@ export interface JobCardPayment {
   note?: string;
 }
 
+/** A length of cloth or trim consumed by one person's garment. */
+export interface MaterialLine {
+  code?: string;
+  productName?: string;
+  qty: number;
+  rate: number;
+}
+
 /** One person being stitched for on an order. */
 export interface MeasurementSet {
   profileId?: string;
@@ -54,6 +62,8 @@ export interface MeasurementSet {
   size?: string;
   qty: number;
   values: Record<string, string>;
+  /** Materials consumed for this person, costed on their own block. */
+  materials?: MaterialLine[];
 }
 
 /** A person kept on file under a customer, reusable on later orders. */
@@ -67,9 +77,17 @@ export interface MeasurementProfile {
   note?: string;
   archived: boolean;
   lastUsedAt?: string;
+  /**
+   * The customer this person is filed under. Present on any list that spans
+   * customers — a bare name does not identify anyone, since two customers can
+   * each have an "Ali".
+   */
+  ledgerName?: string;
+  ledgerPhone?: string;
+  ledgerType?: string;
 }
 
-export type JobCardStatus = 'open' | 'closed' | 'converted';
+export type JobCardStatus = 'draft' | 'open' | 'closed' | 'converted';
 
 export interface JobCard {
   _id: string;
@@ -160,14 +178,35 @@ export interface Page<T> {
   limit: number;
 }
 
+export interface DashboardRange {
+  from: string;
+  to: string;
+}
+
 export interface DashboardSummary {
-  todaySales: number;
-  todayBills: number;
-  monthSales: number;
-  monthBills: number;
-  openJobCards: number;
+  range: DashboardRange;
+  sales: {
+    gross: number;
+    returns: number;
+    net: number;
+    billCount: number;
+    returnCount: number;
+  };
+  orders: {
+    newOrders: number;
+    pending: number;
+    delivered: number;
+  };
+  payments: {
+    cash: number;
+    bank: number;
+    card: number;
+    credit: number;
+    total: number;
+  };
   totalCustomers: number;
   recentJobCards: JobCard[];
+  recentSales: Sale[];
   lowStock: Product[];
 }
 
@@ -241,4 +280,34 @@ export interface PermissionCatalog {
   permissions: string[];
   groups: PermissionGroup[];
   roleLabels: Record<Role, string>;
+}
+
+/** Per-order outcome of a bulk convert — some rows can be skipped. */
+export interface BulkConvertResult {
+  converted: { id: string; no: number; billNo: number }[];
+  skipped: { id: string; no?: number; reason: string }[];
+}
+
+export type AuditAction = 'create' | 'update' | 'payment' | 'close' | 'reopen' | 'convert';
+
+export interface AuditChange {
+  field: string;
+  from: string;
+  to: string;
+}
+
+/** One entry in the Super Admin change log. */
+export interface AuditEntry {
+  _id: string;
+  entity: 'jobcard';
+  entityId: string;
+  entityNo?: number;
+  entityRef?: string;
+  partyName?: string;
+  action: AuditAction;
+  summary?: string;
+  changes: AuditChange[];
+  username: string;
+  userName: string;
+  at: string;
 }

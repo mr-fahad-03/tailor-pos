@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { AnchoredDropdown } from '@/components/AnchoredDropdown';
 import { api } from '@/lib/api';
 import { fmt } from '@/lib/format';
 import type { Product } from '@/lib/types';
@@ -14,26 +15,34 @@ export function ProductSearchInput({
   onChange,
   onPick,
   placeholder = 'Code',
+  disabled,
+  /** Codes read better monospaced; a product name does not. */
+  className = 'font-mono uppercase',
 }: {
   value: string;
   onChange: (v: string) => void;
   onPick: (p: Product) => void;
   placeholder?: string;
+  disabled?: boolean;
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<Product[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fn = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', fn);
     return () => document.removeEventListener('mousedown', fn);
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || disabled) return;
     const t = setTimeout(async () => {
       try {
         const r = await api.products.list(value, 1, 8);
@@ -43,13 +52,14 @@ export function ProductSearchInput({
       }
     }, 250);
     return () => clearTimeout(t);
-  }, [value, open]);
+  }, [value, open, disabled]);
 
   return (
     <div ref={wrapRef} className="relative">
       <input
         value={value}
         placeholder={placeholder}
+        disabled={disabled}
         onChange={(e) => {
           onChange(e.target.value);
           setOpen(true);
@@ -62,10 +72,10 @@ export function ProductSearchInput({
             setOpen(false);
           }
         }}
-        className="input input-sm font-mono uppercase"
+        className={`input input-sm ${className}`}
       />
-      {open && results.length > 0 && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-xl border border-ink-200 bg-white shadow-xl">
+      <AnchoredDropdown anchorRef={wrapRef} panelRef={panelRef} open={open && results.length > 0} width={288}>
+        <>
           {results.map((p) => (
             <button
               key={p._id}
@@ -86,8 +96,8 @@ export function ProductSearchInput({
           <p className="border-t border-ink-100 px-3 py-1.5 text-[10px] text-ink-400">
             F2 / Enter to pick first match
           </p>
-        </div>
-      )}
+        </>
+      </AnchoredDropdown>
     </div>
   );
 }

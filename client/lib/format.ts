@@ -7,6 +7,21 @@ export const fmt = (n: unknown): string => {
 /** Money with AED suffix for hero numbers */
 export const fmtAED = (n: unknown): string => `${fmt(n)} AED`;
 
+/**
+ * Money for dashboard tiles, where the whole figure has to sit on one line in a
+ * quarter-width card: grouped thousands, and the '.00' dropped when there is
+ * nothing after the point. 2000 -> '2,000 AED', 1700.5 -> '1,700.50 AED'.
+ */
+export const fmtAEDTile = (n: unknown): string => {
+  const v = Number(n);
+  const safe = Number.isFinite(v) ? v : 0;
+  const decimals = Number.isInteger(safe) ? 0 : 2;
+  return `${safe.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })} AED`;
+};
+
 export const todayISO = (): string => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
