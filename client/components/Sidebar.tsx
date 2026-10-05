@@ -42,7 +42,6 @@ const NAV: NavGroup[] = [
     items: [
       { href: '/customers', label: 'Customers', icon: 'users', permission: 'ledgers.view' },
       { href: '/suppliers', label: 'Suppliers', icon: 'ledgers', permission: 'ledgers.view' },
-      { href: '/wholesalers', label: 'Wholesalers', icon: 'ledgers', permission: 'ledgers.view' },
       { href: '/measurements', label: 'Measurements', icon: 'scissors', permission: 'jobcards.view' },
       { href: '/ledgers', label: 'All Ledgers', icon: 'ledgers', permission: 'ledgers.view' },
       { href: '/products', label: 'Products', icon: 'products', permission: 'products.view' },

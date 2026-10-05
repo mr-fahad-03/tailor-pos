@@ -125,6 +125,9 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       : [emptyItem()],
   );
   const [discount, setDiscount] = useState(String(initial?.discount ?? '0'));
+  const [additionalCharges, setAdditionalCharges] = useState(
+    String(initial?.additionalCharges ?? '0'),
+  );
   // One block per person. Old cards carry a single unnamed set, so lift that
   // into the new shape on open rather than losing it.
   const [sets, setSets] = useState<EditableSet[]>(() => {
@@ -195,16 +198,20 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       return { ...r, qty: q, rate: rt, amount: r2(q * rt) };
     });
     const total = r2(rows.reduce((s, r) => s + r.amount, 0));
+    // Charges join the taxable base beside the items, exactly as the server
+    // computes it — the two must never disagree.
+    const extra = r2(num(additionalCharges));
     const d = r2(num(discount));
-    const tax = r2(Math.max(total - d, 0) * (taxRate / 100));
-    const netAmount = r2(total - d + tax);
+    const taxable = Math.max(total + extra - d, 0);
+    const tax = r2(taxable * (taxRate / 100));
+    const netAmount = r2(taxable + tax);
     const advance = r2(payments.reduce((s, p) => s + num(p.amount), 0));
     const advanceBeforeTax = r2(advance / (1 + taxRate / 100));
     const advanceTax = r2(advance - advanceBeforeTax);
     const balance = r2(netAmount - advance);
     const materialTotal = r2(sets.reduce((s, p) => s + materialsTotal(p.materials), 0));
-    return { rows, total, discount: d, tax, netAmount, advance, advanceBeforeTax, advanceTax, balance, materialTotal };
-  }, [items, discount, payments, sets, taxRate]);
+    return { rows, total, additionalCharges: extra, discount: d, tax, netAmount, advance, advanceBeforeTax, advanceTax, balance, materialTotal };
+  }, [items, discount, additionalCharges, payments, sets, taxRate]);
 
   function loadDoc(d: JobCard) {
     setNo(d.no ?? null);
@@ -225,6 +232,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         : [emptyItem()],
     );
     setDiscount(String(d.discount));
+    setAdditionalCharges(String(d.additionalCharges ?? 0));
     setSets(setsFromCard(d));
     setFabricConsumption(d.measurements?.FABRIC_CONSUMPTION ?? '');
     setJobCost(String(d.jobCost));
@@ -250,6 +258,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       items: calc.rows
         .filter((r) => r.code || r.productName || r.qty || r.rate)
         .map((r) => ({ code: r.code, productName: r.productName, qty: r.qty, rate: r.rate })),
+      additionalCharges: calc.additionalCharges,
       discount: calc.discount,
       taxRate,
       // The first person also fills the legacy fields, so older prints and any
@@ -351,9 +360,9 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
    * deliberately do not count.
    */
   function hasContent(): boolean {
-    if (partyName.trim() || phone.trim() || accountsAc.trim() || invoiceNo.trim()) return true;
+    if (partyName.trim() || phone.trim()) return true;
     if (fabricConsumption.trim()) return true;
-    if (num(discount) || num(jobCost)) return true;
+    if (num(discount) || num(additionalCharges) || num(jobCost)) return true;
     if (items.some((r) => r.code.trim() || r.productName.trim() || num(r.rate))) return true;
     return sets.some(
       (p) =>
@@ -602,7 +611,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
           <Card className="p-5">
             {/* which order this is */}
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-              <Field label={no == null && draftNo != null ? 'Draft No' : 'No'}>
+              <Field label={no == null && draftNo != null ? 'Draft No' : 'Invoice No'}>
                 <TextInput
                   value={no ?? (draftNo != null ? `DRAFT-${draftNo}` : '…')}
                   readOnly
@@ -639,27 +648,9 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                     <Icon name="search" className="h-[17px] w-[17px]" />
                   </button>
                 </div>
-              </Field>
-              <Field label="Phone">
-                <TextInput value={phone} onChange={(e) => setPhone(e.target.value)} disabled={readOnly} className="font-mono" />
-              </Field>
-              <Field label="Delivery Date">
-                <DateInput value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} disabled={readOnly} />
-              </Field>
-            </div>
-            {/* bookkeeping references */}
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Field label="Accounts A/c">
-                <TextInput value={accountsAc} onChange={(e) => setAccountsAc(e.target.value)} disabled={readOnly} />
-              </Field>
-              <Field label="Invoice No">
-                <TextInput value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} disabled={readOnly} />
-              </Field>
-              <div className="flex flex-wrap items-end gap-3 pb-1">
-                <Checkbox label="New (walk-in customer)" checked={isNew} onChange={setIsNew} />
                 {canAddLedger && (
                   <button
-                    className="btn-soft !py-1.5 text-xs"
+                    className="mt-1.5 text-[11px] font-semibold text-brand-700 transition hover:underline disabled:opacity-50"
                     onClick={() => { setLedgerMode('newCustomer'); setLedgerOpen(true); }}
                     disabled={readOnly}
                     title="Add a customer to the ledger and put them on this order"
@@ -667,7 +658,13 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                     ＋ New customer
                   </button>
                 )}
-              </div>
+              </Field>
+              <Field label="Phone">
+                <TextInput value={phone} onChange={(e) => setPhone(e.target.value)} disabled={readOnly} className="font-mono" />
+              </Field>
+              <Field label="Delivery Date">
+                <DateInput value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} disabled={readOnly} />
+              </Field>
             </div>
           </Card>
 
@@ -791,6 +788,15 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium text-ink-500">Total</span>
                 <span className="font-bold tabular-nums">{fmt(calc.total)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-medium text-ink-500">Additional Charges</span>
+                <NumberInput
+                  value={additionalCharges}
+                  onChange={(e) => setAdditionalCharges(e.target.value)}
+                  disabled={readOnly}
+                  className="input-sm !w-32"
+                />
               </div>
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="font-medium text-ink-500">Discount</span>
@@ -1004,7 +1010,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         <div className="mb-4 flex gap-2">
           <TextInput
             autoFocus
-            placeholder="e.g. 13258 or rf-13051 or TARAK"
+            placeholder="e.g. 13258 or Ref-13051 or TARAK"
             value={findQ}
             onChange={(e) => setFindQ(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void searchFind()}
@@ -1017,7 +1023,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
           <table className="w-full">
             <thead>
               <tr className="border-b border-ink-100">
-                <th className="th">No</th>
+                <th className="th">Invoice No</th>
                 <th className="th">Ref</th>
                 <th className="th">Customer</th>
                 <th className="th text-right">Net</th>

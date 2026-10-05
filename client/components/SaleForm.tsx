@@ -480,7 +480,7 @@ export function SaleForm() {
         <div className="mb-4 flex gap-2">
           <TextInput
             autoFocus
-            placeholder="e.g. rf-13051 or customer name"
+            placeholder="e.g. Ref-13051 or customer name"
             value={jcQ}
             onChange={(e) => setJcQ(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void searchJobCards()}

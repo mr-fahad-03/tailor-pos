@@ -6,7 +6,7 @@ export interface ILedger extends Document {
   address?: string;
   trn?: string;
   openingBalance: number;
-  type: 'customer' | 'supplier' | 'wholesaler' | 'general';
+  type: 'customer' | 'supplier' | 'general';
 }
 
 const ledgerSchema = new Schema<ILedger>(
@@ -18,7 +18,7 @@ const ledgerSchema = new Schema<ILedger>(
     openingBalance: { type: Number, default: 0 },
     type: {
       type: String,
-      enum: ['customer', 'supplier', 'wholesaler', 'general'],
+      enum: ['customer', 'supplier', 'general'],
       default: 'customer',
     },
   },

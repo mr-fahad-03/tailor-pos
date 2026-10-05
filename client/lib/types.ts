@@ -5,7 +5,7 @@ export interface Ledger {
   address?: string;
   trn?: string;
   openingBalance: number;
-  type: 'customer' | 'supplier' | 'wholesaler' | 'general';
+  type: 'customer' | 'supplier' | 'general';
 }
 
 export interface Product {
@@ -106,6 +106,7 @@ export interface JobCard {
   invoiceNo?: string;
   items: JobCardItem[];
   total: number;
+  additionalCharges: number;
   discount: number;
   tax: number;
   netAmount: number;

@@ -19,21 +19,30 @@ export function lineAmount(qty: number, rate: number): number {
 
 export interface JobCardTotals {
   total: number;
+  additionalCharges: number;
   discount: number;
   tax: number;
   netAmount: number;
 }
 
+/**
+ * Additional charges (express work, delivery, a trim bought in) join the
+ * taxable base alongside the line items, so VAT is charged on them the same
+ * way it is on the stitching itself.
+ */
 export function jobCardTotals(
   items: TotalsInput[],
   discount: number,
   taxRate: number,
+  additionalCharges = 0,
 ): JobCardTotals {
   const total = r2(items.reduce((s, i) => s + lineAmount(i.qty, i.rate), 0));
+  const extra = r2(num(additionalCharges));
   const d = r2(num(discount));
-  const tax = r2(Math.max(total - d, 0) * (num(taxRate) / 100));
-  const netAmount = r2(total - d + tax);
-  return { total, discount: d, tax, netAmount };
+  const taxable = Math.max(total + extra - d, 0);
+  const tax = r2(taxable * (num(taxRate) / 100));
+  const netAmount = r2(taxable + tax);
+  return { total, additionalCharges: extra, discount: d, tax, netAmount };
 }
 
 /** Split an advance (tax-inclusive) into before-tax / tax portions. */

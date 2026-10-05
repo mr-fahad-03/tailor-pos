@@ -177,7 +177,7 @@ function JobCardsInner() {
                       />
                     </th>
                   )}
-                  <th className="th">No</th>
+                  <th className="th">Invoice No</th>
                   <th className="th">Ref</th>
                   <th className="th">Customer</th>
                   <th className="th">Phone</th>

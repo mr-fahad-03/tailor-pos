@@ -14,7 +14,7 @@ const emptyForm: {
   address: string;
   trn: string;
   openingBalance: string;
-  type: 'customer' | 'supplier' | 'wholesaler' | 'general';
+  type: 'customer' | 'supplier' | 'general';
 } = { name: '', phone: '', address: '', trn: '', openingBalance: '0', type: 'customer' };
 
 export default function LedgersPage() {

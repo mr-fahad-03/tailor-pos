@@ -47,6 +47,7 @@ export function snapshotJobCard(doc: any): Snapshot {
   s['Size'] = str(doc.size);
   s['Fabric Consumption'] = str(doc.measurements?.FABRIC_CONSUMPTION);
   s['Total'] = money(doc.total);
+  s['Additional Charges'] = money(doc.additionalCharges);
   s['Discount'] = money(doc.discount);
   s['Tax'] = money(doc.tax);
   s['Net Amount'] = money(doc.netAmount);

@@ -231,7 +231,7 @@ export default function DashboardPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-ink-100">
-                        <th className="th">No</th>
+                        <th className="th">Invoice No</th>
                         <th className="th">Ref</th>
                         <th className="th">Customer</th>
                         <th className="th">Delivery</th>

@@ -8,7 +8,7 @@ import { Field, Select, TextInput } from './ui';
 import { useToast } from './Toast';
 import { useAuth } from './AuthContext';
 
-type LedgerType = 'customer' | 'supplier' | 'wholesaler' | 'general';
+type LedgerType = 'customer' | 'supplier' | 'general';
 
 export function LedgerSearchModal({
   open,

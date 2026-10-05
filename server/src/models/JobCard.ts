@@ -45,6 +45,8 @@ export interface IJobCard extends Document {
   invoiceNo?: string;
   items: IJobCardItem[];
   total: number;
+  /** Express work, delivery and the like — taxed with the order. */
+  additionalCharges: number;
   discount: number;
   tax: number;
   netAmount: number;
@@ -135,6 +137,7 @@ const jobCardSchema = new Schema<IJobCard>(
     invoiceNo: { type: String, trim: true },
     items: { type: [itemSchema], default: [] },
     total: { type: Number, default: 0 },
+    additionalCharges: { type: Number, default: 0 },
     discount: { type: Number, default: 0 },
     tax: { type: Number, default: 0 },
     netAmount: { type: Number, default: 0 },

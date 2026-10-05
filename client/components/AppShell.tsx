@@ -21,7 +21,6 @@ const ROUTE_PERMISSIONS: { prefix: string; permission: string; exact?: boolean }
   { prefix: '/ledgers', permission: 'ledgers.view' },
   { prefix: '/customers', permission: 'ledgers.view' },
   { prefix: '/suppliers', permission: 'ledgers.view' },
-  { prefix: '/wholesalers', permission: 'ledgers.view' },
   { prefix: '/measurements', permission: 'jobcards.view' },
   { prefix: '/products', permission: 'products.view' },
   { prefix: '/payments', permission: 'payments.view' },

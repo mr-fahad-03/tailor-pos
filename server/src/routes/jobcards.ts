@@ -15,9 +15,9 @@ import {
 
 /**
  * Prefix for an order's reference. Orders raised before this changed still
- * carry their old 'fm-' refs, and search matches either.
+ * carry their older 'fm-' and 'rf-' refs, and search matches any of them.
  */
-const REF_PREFIX = 'rf';
+const REF_PREFIX = 'Ref';
 
 /** Drop blank material rows and coerce the numbers. */
 function cleanMaterials(input: unknown) {
@@ -84,6 +84,7 @@ function searchFilter(q?: string) {
 interface JobCardBody {
   /** Only 'draft' or 'open' may be set from the form. */
   status?: string;
+  additionalCharges?: number;
   bookNo?: number;
   ref?: string;
   date?: string;
@@ -128,7 +129,7 @@ function buildComputed(body: JobCardBody) {
       rate: num(i.rate),
       amount: lineAmount(num(i.qty), num(i.rate)),
     }));
-  const totals = jobCardTotals(items, num(body.discount), taxRate);
+  const totals = jobCardTotals(items, num(body.discount), taxRate, num(body.additionalCharges));
   // Legacy orders kept one shared list; materials now sit on each person.
   const materialsUsed = cleanMaterials(body.materialsUsed);
   const perPerson = (cleanMeasurementSets(body.measurementSets) ?? []).flatMap(
@@ -253,6 +254,7 @@ jobCardRouter.post(
       invoiceNo: body.invoiceNo?.trim(),
       items: computed.items,
       total: computed.totals.total,
+      additionalCharges: computed.totals.additionalCharges,
       discount: computed.totals.discount,
       tax: computed.totals.tax,
       netAmount: computed.totals.netAmount,
@@ -339,6 +341,7 @@ jobCardRouter.put(
       invoiceNo: body.invoiceNo?.trim() ?? existing.invoiceNo,
       items: computed.items,
       total: computed.totals.total,
+      additionalCharges: computed.totals.additionalCharges,
       discount: computed.totals.discount,
       tax: computed.totals.tax,
       netAmount: computed.totals.netAmount,
@@ -504,8 +507,12 @@ async function convertToSale(doc: any, body: ConvertBody) {
       };
     });
     const totQty = r2(items.reduce((s: number, i: any) => s + i.qty, 0));
-    const grossAmount = r2(items.reduce((s: number, i: any) => s + i.grossAmt, 0));
-    const taxAmtTotal = r2(items.reduce((s: number, i: any) => s + i.taxAmt, 0));
+    // The order's additional charge rides onto the bill as freight, taxed the
+    // same way, so the invoice comes to what the order said it would.
+    const extra = r2(num(doc.additionalCharges));
+    const extraTax = r2(extra * (taxRate / 100));
+    const grossAmount = r2(items.reduce((s: number, i: any) => s + i.grossAmt, 0) + extra);
+    const taxAmtTotal = r2(items.reduce((s: number, i: any) => s + i.taxAmt, 0) + extraTax);
     const netAmount = r2(grossAmount + taxAmtTotal);
     const advanceAmount = r2(doc.advance);
 
@@ -527,7 +534,7 @@ async function convertToSale(doc: any, body: ConvertBody) {
       discountAmt: 0,
       additionalDiscount: 0,
       taxAmt: taxAmtTotal,
-      freight: 0,
+      freight: extra,
       advanceAmount,
       netAmount,
       balance: r2(netAmount - advanceAmount),

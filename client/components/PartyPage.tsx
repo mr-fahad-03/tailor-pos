@@ -9,7 +9,7 @@ import { Modal } from '@/components/Modal';
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/components/AuthContext';
 
-export type PartyType = 'customer' | 'supplier' | 'wholesaler';
+export type PartyType = 'customer' | 'supplier';
 
 /** Which fields each kind of party actually needs on its form. */
 export interface PartyConfig {
@@ -28,9 +28,9 @@ export interface PartyConfig {
 const blank = { name: '', phone: '', address: '', trn: '', openingBalance: '0' };
 
 /**
- * One screen per party type. Customers, suppliers and wholesalers are all
- * ledgers underneath, but each gets its own page, its own list and its own
- * add/edit form showing only the fields that kind of party needs.
+ * One screen per party type. Customers and suppliers are both ledgers
+ * underneath, but each gets its own page, its own list and its own add/edit
+ * form showing only the fields that kind of party needs.
  */
 export function PartyPage({ config }: { config: PartyConfig }) {
   const { can } = useAuth();
