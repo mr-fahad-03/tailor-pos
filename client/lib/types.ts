@@ -8,10 +8,20 @@ export interface Ledger {
   type: 'customer' | 'supplier' | 'general';
 }
 
+/** Where a product may be used: a charged line, a consumed material, or both. */
+export type ProductUsage = 'item' | 'material' | 'both';
+
+export const USAGE_LABEL: Record<ProductUsage, string> = {
+  item: 'Item',
+  material: 'Material',
+  both: 'Item / Material',
+};
+
 export interface Product {
   _id: string;
   code: string;
   name: string;
+  usage?: ProductUsage;
   rate: number;
   wholesaleRate: number;
   category: 'stitching' | 'fabric' | 'material';

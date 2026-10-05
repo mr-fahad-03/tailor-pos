@@ -634,8 +634,10 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               </Field>
             </div>
             {/* who it is for, and when it is due */}
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Field label="Party A/c (Customer)">
+            {/* The customer needs the room: a name, a lookup and an add button.
+                Phone and delivery date are short values, so they give it up. */}
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-12">
+              <Field label="Party A/c (Customer)" className="md:col-span-6">
                 <div className="flex gap-2">
                   <TextInput
                     value={partyName}
@@ -647,22 +649,22 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   <button className="btn-soft shrink-0" onClick={() => { setLedgerMode('search'); setLedgerOpen(true); }} disabled={readOnly} title="Find ledger (F2)" aria-label="Find ledger">
                     <Icon name="search" className="h-[17px] w-[17px]" />
                   </button>
+                  {canAddLedger && (
+                    <button
+                      className="btn-soft shrink-0 whitespace-nowrap !px-2.5 !py-1.5 text-xs"
+                      onClick={() => { setLedgerMode('newCustomer'); setLedgerOpen(true); }}
+                      disabled={readOnly}
+                      title="Add a customer to the ledger and put them on this order"
+                    >
+                      ＋ New customer
+                    </button>
+                  )}
                 </div>
-                {canAddLedger && (
-                  <button
-                    className="mt-1.5 text-[11px] font-semibold text-brand-700 transition hover:underline disabled:opacity-50"
-                    onClick={() => { setLedgerMode('newCustomer'); setLedgerOpen(true); }}
-                    disabled={readOnly}
-                    title="Add a customer to the ledger and put them on this order"
-                  >
-                    ＋ New customer
-                  </button>
-                )}
               </Field>
-              <Field label="Phone">
+              <Field label="Phone" className="md:col-span-3">
                 <TextInput value={phone} onChange={(e) => setPhone(e.target.value)} disabled={readOnly} className="font-mono" />
               </Field>
-              <Field label="Delivery Date">
+              <Field label="Delivery Date" className="md:col-span-3">
                 <DateInput value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} disabled={readOnly} />
               </Field>
             </div>

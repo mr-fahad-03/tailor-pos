@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { fmt } from '@/lib/format';
-import type { Product } from '@/lib/types';
+import { USAGE_LABEL, type Product, type ProductUsage } from '@/lib/types';
 import { Card, EmptyState, Field, Select, TextInput } from '@/components/ui';
 import { Modal } from '@/components/Modal';
 import { useToast } from '@/components/Toast';
@@ -15,6 +15,7 @@ const emptyForm: {
   rate: string;
   wholesaleRate: string;
   category: 'stitching' | 'fabric' | 'material';
+  usage: ProductUsage;
   unit: string;
   stockQty: string;
 } = {
@@ -23,6 +24,7 @@ const emptyForm: {
   rate: '',
   wholesaleRate: '',
   category: 'stitching',
+  usage: 'both',
   unit: 'PCS',
   stockQty: '0',
 };
@@ -75,6 +77,7 @@ export default function ProductsPage() {
       rate: String(p.rate),
       wholesaleRate: String(p.wholesaleRate),
       category: p.category,
+      usage: p.usage ?? 'both',
       unit: p.unit,
       stockQty: String(p.stockQty),
     });
@@ -94,6 +97,7 @@ export default function ProductsPage() {
         rate: Number(form.rate) || 0,
         wholesaleRate: Number(form.wholesaleRate) || 0,
         category: form.category,
+        usage: form.usage,
         unit: form.unit,
         stockQty: Number(form.stockQty) || 0,
       };
@@ -169,6 +173,7 @@ export default function ProductsPage() {
                   <th className="th">Code</th>
                   <th className="th">Name</th>
                   <th className="th">Category</th>
+                  <th className="th">Use As</th>
                   <th className="th text-right">Rate</th>
                   <th className="th text-right">Wholesale</th>
                   <th className="th text-right">Stock</th>
@@ -182,6 +187,11 @@ export default function ProductsPage() {
                     <td className="td font-semibold">{p.name}</td>
                     <td className="td">
                       <span className="badge bg-ink-100 capitalize text-ink-600">{p.category}</span>
+                    </td>
+                    <td className="td">
+                      <span className="badge bg-brand-50 text-brand-700">
+                        {USAGE_LABEL[p.usage ?? 'both']}
+                      </span>
                     </td>
                     <td className="td text-right font-bold tabular-nums">{fmt(p.rate)}</td>
                     <td className="td text-right tabular-nums text-ink-500">{fmt(p.wholesaleRate)}</td>
@@ -234,6 +244,13 @@ export default function ProductsPage() {
               <option value="stitching">Stitching</option>
               <option value="fabric">Fabric</option>
               <option value="material">Material</option>
+            </Select>
+          </Field>
+          <Field label="Use As" className="col-span-2">
+            <Select value={form.usage} onChange={set('usage')}>
+              <option value="item">Item</option>
+              <option value="material">Material</option>
+              <option value="both">Item / Material</option>
             </Select>
           </Field>
           <Field label="Name *" className="col-span-2">

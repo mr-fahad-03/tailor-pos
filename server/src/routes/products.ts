@@ -38,7 +38,7 @@ productRouter.post(
   '/',
   requirePerm('products.manage'),
   asyncHandler(async (req, res) => {
-    const { code, name, rate, wholesaleRate, category, unit, stockQty } = req.body ?? {};
+    const { code, name, rate, wholesaleRate, category, usage, unit, stockQty } = req.body ?? {};
     if (!code || !String(code).trim()) throw new HttpError(400, 'Product code is required');
     if (!name || !String(name).trim()) throw new HttpError(400, 'Product name is required');
     const product = await Product.create({
@@ -47,6 +47,7 @@ productRouter.post(
       rate: num(rate),
       wholesaleRate: num(wholesaleRate),
       category: category || 'stitching',
+      usage: usage || 'both',
       unit: unit || 'PCS',
       stockQty: num(stockQty),
     });
@@ -70,7 +71,7 @@ productRouter.put(
   '/:id',
   requirePerm('products.manage'),
   asyncHandler(async (req, res) => {
-    const { code, name, rate, wholesaleRate, category, unit, stockQty } = req.body ?? {};
+    const { code, name, rate, wholesaleRate, category, usage, unit, stockQty } = req.body ?? {};
     const product = await Product.findByIdAndUpdate(
       req.params.id,
       {
@@ -79,6 +80,7 @@ productRouter.put(
         ...(rate !== undefined ? { rate: num(rate) } : {}),
         ...(wholesaleRate !== undefined ? { wholesaleRate: num(wholesaleRate) } : {}),
         ...(category !== undefined ? { category } : {}),
+        ...(usage !== undefined ? { usage } : {}),
         ...(unit !== undefined ? { unit } : {}),
         ...(stockQty !== undefined ? { stockQty: num(stockQty) } : {}),
       },

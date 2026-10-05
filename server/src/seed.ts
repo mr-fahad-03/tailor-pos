@@ -41,13 +41,34 @@ async function seed() {
   }
 
   const products = [
-    { code: '5001', name: 'ARABI BIG', rate: 138.1, wholesaleRate: 130, category: 'stitching', unit: 'PCS', stockQty: 100 },
-    { code: '5002', name: 'KUWAITI BIG', rate: 119.05, wholesaleRate: 112, category: 'stitching', unit: 'PCS', stockQty: 100 },
-    { code: '936', name: 'LUBBAN', rate: 119.05, wholesaleRate: 110, category: 'fabric', unit: 'MTR', stockQty: 250 },
+    // --- charged line items: the garments a customer is billed for ---------
+    { code: '5001', name: 'ARABI BIG', rate: 138.1, wholesaleRate: 130, category: 'stitching', usage: 'item', unit: 'PCS', stockQty: 100 },
+    { code: '5002', name: 'KUWAITI BIG', rate: 119.05, wholesaleRate: 112, category: 'stitching', usage: 'item', unit: 'PCS', stockQty: 100 },
+    { code: '5003', name: 'EMIRATI THOBE', rate: 145, wholesaleRate: 136, category: 'stitching', usage: 'item', unit: 'PCS', stockQty: 100 },
+    { code: '5004', name: 'ABAYA PLAIN', rate: 160, wholesaleRate: 150, category: 'stitching', usage: 'item', unit: 'PCS', stockQty: 80 },
+
+    // --- materials consumed while stitching, not billed as a line ---------
+    { code: '7001', name: 'THREAD SPOOL', rate: 4.5, wholesaleRate: 3.75, category: 'material', usage: 'material', unit: 'PCS', stockQty: 500 },
+    { code: '7002', name: 'BUTTON SET', rate: 6, wholesaleRate: 5, category: 'material', usage: 'material', unit: 'SET', stockQty: 400 },
+    { code: '7003', name: 'ZIP 8 INCH', rate: 3.25, wholesaleRate: 2.6, category: 'material', usage: 'material', unit: 'PCS', stockQty: 300 },
+    { code: '7004', name: 'INTERLINING', rate: 12, wholesaleRate: 10, category: 'material', usage: 'material', unit: 'MTR', stockQty: 200 },
+
+    // --- either: cloth sold by the metre or cut into a garment ------------
+    { code: '936', name: 'LUBBAN', rate: 119.05, wholesaleRate: 110, category: 'fabric', usage: 'both', unit: 'MTR', stockQty: 250 },
+    { code: '9002', name: 'JAPANESE NIDA', rate: 95, wholesaleRate: 88, category: 'fabric', usage: 'both', unit: 'MTR', stockQty: 180 },
+    { code: '9003', name: 'COTTON POPLIN', rate: 42, wholesaleRate: 36, category: 'fabric', usage: 'both', unit: 'MTR', stockQty: 220 },
+    { code: '9004', name: 'LINEN BLEND', rate: 68, wholesaleRate: 60, category: 'fabric', usage: 'both', unit: 'MTR', stockQty: 140 },
   ];
 
   for (const p of products) {
     await Product.updateOne({ code: p.code }, { $setOnInsert: p }, { upsert: true });
+    // Products created before `usage` existed have no value for it. Fill it in
+    // once, matching only documents where it is still missing, so a later edit
+    // on the Products screen is never overwritten by re-running the seed.
+    await Product.updateOne(
+      { code: p.code, usage: { $exists: false } },
+      { $set: { usage: p.usage } },
+    );
   }
 
   // Continue numbering from the old system
