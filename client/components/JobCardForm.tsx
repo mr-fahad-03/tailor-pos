@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { addDaysISO, fmt, fmtDate, num, todayISO, toISODate } from '@/lib/format';
+import { addDaysISO, fmt, fmtDate, num, orderNo, todayISO, toISODate } from '@/lib/format';
 import {
   MEASURE_FIELDS,
   type JobCard,
@@ -98,6 +98,8 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
   // ---- header ----
   const [no, setNo] = useState<number | null>(initial?.no ?? null);
+  /** A draft's own number, shown until it is promoted and takes a real one. */
+  const [draftNo, setDraftNo] = useState<number | null>(initial?.draftNo ?? null);
   const [bookNo, setBookNo] = useState(String(initial?.bookNo ?? settings.bookNo));
   const [ref, setRef] = useState(initial?.ref ?? '');
   const [date, setDate] = useState(toISODate(initial?.date) || todayISO());
@@ -205,7 +207,8 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   }, [items, discount, payments, sets, taxRate]);
 
   function loadDoc(d: JobCard) {
-    setNo(d.no);
+    setNo(d.no ?? null);
+    setDraftNo(d.draftNo ?? null);
     setBookNo(String(d.bookNo));
     setRef(d.ref);
     setDate(toISODate(d.date) || todayISO());
@@ -328,7 +331,11 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         settled.current = true;
         await rememberPeople();
         loadDoc(updated);
-        toast(status === 'draft' ? `Draft ${updated.no} saved to orders` : `Order ${updated.no} updated`);
+        toast(
+          status === 'draft'
+            ? `Draft saved to orders as ${updated.no}`
+            : `Order ${updated.no} updated`,
+        );
       }
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Save failed', 'error');
@@ -595,8 +602,12 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
           <Card className="p-5">
             {/* which order this is */}
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-              <Field label="No">
-                <TextInput value={no ?? '…'} readOnly className="bg-ink-50 font-bold text-brand-700" />
+              <Field label={no == null && draftNo != null ? 'Draft No' : 'No'}>
+                <TextInput
+                  value={no ?? (draftNo != null ? `DRAFT-${draftNo}` : '…')}
+                  readOnly
+                  className="bg-ink-50 font-bold text-brand-700"
+                />
               </Field>
               <Field label="Book No">
                 <NumberInput value={bookNo} onChange={(e) => setBookNo(e.target.value)} disabled={readOnly} />
@@ -1020,7 +1031,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   className="cursor-pointer hover:bg-brand-50"
                   onClick={() => router.push(`/job-cards/${j._id}`)}
                 >
-                  <td className="td font-bold text-brand-700">{j.no}</td>
+                  <td className="td font-bold text-brand-700">{orderNo(j)}</td>
                   <td className="td font-mono text-xs">{j.ref}</td>
                   <td className="td">{j.partyName || '—'}</td>
                   <td className="td text-right tabular-nums">{fmt(j.netAmount)}</td>

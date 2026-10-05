@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { config } from './config';
+import { runMigrations } from './migrations';
 
 /**
  * Serverless invocations reuse a warm container, so the connection is cached
@@ -27,9 +28,10 @@ export async function connectDb(): Promise<void> {
         maxPoolSize: 10,
         serverSelectionTimeoutMS: 10000,
       })
-      .then((m) => {
+      .then(async (m) => {
         // eslint-disable-next-line no-console
         console.log('[db] connected');
+        await runMigrations();
         return m;
       })
       .catch((err) => {

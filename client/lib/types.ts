@@ -91,7 +91,9 @@ export type JobCardStatus = 'draft' | 'open' | 'closed' | 'converted';
 
 export interface JobCard {
   _id: string;
-  no: number;
+  /** Absent on a draft — a number is only taken when the order becomes real. */
+  no?: number;
+  draftNo?: number;
   bookNo: number;
   ref: string;
   date: string;

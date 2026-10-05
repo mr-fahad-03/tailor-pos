@@ -29,8 +29,11 @@ export interface IJobCardPayment {
 export type JobCardStatus = 'draft' | 'open' | 'closed' | 'converted';
 
 export interface IJobCard extends Document {
-  no: number;
+  /** Assigned only when the order becomes real; a draft has none. */
+  no?: number;
   bookNo: number;
+  /** Drafts are numbered from their own series so they consume no order numbers. */
+  draftNo?: number;
   ref: string;
   date: Date;
   deliveryDate?: Date;
@@ -115,7 +118,11 @@ const paymentSchema = new Schema<IJobCardPayment>(
 
 const jobCardSchema = new Schema<IJobCard>(
   {
-    no: { type: Number, unique: true, index: true },
+    // Not unique at field level: a draft carries no number, and Mongo would
+    // treat every missing value as the same one. The partial index below makes
+    // the number unique among real orders only.
+    no: { type: Number },
+    draftNo: { type: Number, index: true },
     bookNo: { type: Number, default: 270 },
     ref: { type: String, unique: true, index: true, trim: true },
     date: { type: Date, default: Date.now },
@@ -174,6 +181,16 @@ const jobCardSchema = new Schema<IJobCard>(
     closedAt: Date,
   },
   { timestamps: true },
+);
+
+/**
+ * Order numbers must stay unique and gapless, so only real orders hold one.
+ * A partial index enforces uniqueness across those, while leaving any number
+ * of drafts — which have no `no` at all — perfectly legal.
+ */
+jobCardSchema.index(
+  { no: 1 },
+  { unique: true, partialFilterExpression: { no: { $type: 'number' } } },
 );
 
 export const JobCard =

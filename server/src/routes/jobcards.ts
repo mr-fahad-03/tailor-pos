@@ -154,7 +154,7 @@ jobCardRouter.get(
     const filter: Record<string, unknown> = { ...searchFilter(q) };
     if (status) filter.status = status;
     const [items, total] = await Promise.all([
-      JobCard.find(filter).sort({ no: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      JobCard.find(filter).sort({ no: -1, draftNo: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       JobCard.countDocuments(filter),
     ]);
     res.json({ items, total, page, limit });
@@ -225,7 +225,12 @@ jobCardRouter.post(
   requirePerm('jobcards.create'),
   asyncHandler(async (req, res) => {
     const body = (req.body ?? {}) as JobCardBody;
-    const no = await nextSeq('jobcard');
+    const isDraft = body.status === 'draft';
+    // A draft must not burn an order number — the shop's sequence carries on
+    // from the old books and a gap in it is a real problem. Drafts are counted
+    // separately and only take a real number if they are ever finished.
+    const no = isDraft ? undefined : await nextSeq('jobcard');
+    const draftNo = isDraft ? await nextSeq('jobcard_draft') : undefined;
     const computed = buildComputed(body);
     const advance = r2(
       ((body as { advance?: number }).advance !== undefined
@@ -235,8 +240,9 @@ jobCardRouter.post(
     const advSplit = advanceSplit(advance, computed.taxRate);
     const jobCard = await JobCard.create({
       no,
+      draftNo,
       bookNo: num(body.bookNo, 270),
-      ref: body.ref?.trim() || `${REF_PREFIX}-${no}`,
+      ref: isDraft ? `DRAFT-${draftNo}` : body.ref?.trim() || `${REF_PREFIX}-${no}`,
       date: body.date ? new Date(body.date) : new Date(),
       deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : undefined,
       partyName: body.partyName?.trim(),
@@ -270,7 +276,7 @@ jobCardRouter.post(
     await recordAudit(req, {
       action: 'create',
       doc: jobCard,
-      summary: `${jobCard.status === 'draft' ? 'Draft' : 'Order'} ${jobCard.no} created for ${
+      summary: `${jobCard.status === 'draft' ? `Draft ${jobCard.draftNo}` : `Order ${jobCard.no}`} created for ${
         jobCard.partyName || 'no customer'
       }`,
     });
@@ -303,6 +309,14 @@ jobCardRouter.put(
     // Taken before any field is touched — this is the 'from' side of the log.
     const before = snapshotJobCard(existing.toObject());
 
+    // Finishing a draft is the moment it earns a number, so the sequence only
+    // ever advances for orders that actually exist.
+    const promoting = existing.status === 'draft' && body.status === 'open';
+    if (promoting) {
+      existing.no = await nextSeq('jobcard');
+      existing.ref = body.ref?.trim() || `${REF_PREFIX}-${existing.no}`;
+    }
+
     const computed = buildComputed(body);
     const paymentsTotal = r2(
       existing.payments.reduce((s: number, p: any) => s + num(p.amount), 0),
@@ -314,7 +328,7 @@ jobCardRouter.put(
 
     existing.set({
       bookNo: body.bookNo !== undefined ? num(body.bookNo, 270) : existing.bookNo,
-      ref: body.ref?.trim() || existing.ref,
+      ref: promoting ? existing.ref : body.ref?.trim() || existing.ref,
       date: body.date ? new Date(body.date) : existing.date,
       deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : existing.deliveryDate,
       partyName: body.partyName?.trim() ?? existing.partyName,

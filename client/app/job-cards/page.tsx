@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
-import { fmt, fmtDate } from '@/lib/format';
+import { fmt, fmtDate, orderNo } from '@/lib/format';
 import type { JobCard } from '@/lib/types';
 import { Card, EmptyState, Seg, StatusBadge, TextInput } from '@/components/ui';
 import { useToast } from '@/components/Toast';
@@ -201,13 +201,13 @@ function JobCardsInner() {
                           disabled={j.status !== 'open'}
                           onChange={() => toggle(j._id)}
                           className="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500 disabled:opacity-40"
-                          aria-label={`Select order ${j.no}`}
+                          aria-label={`Select order ${orderNo(j)}`}
                         />
                       </td>
                     )}
                     <td className="td">
                       <Link href={`/job-cards/${j._id}`} className="font-extrabold text-brand-700 hover:underline">
-                        {j.no}
+                        {orderNo(j)}
                       </Link>
                     </td>
                     <td className="td font-mono text-xs text-ink-500">{j.ref}</td>
@@ -228,7 +228,7 @@ function JobCardsInner() {
                             className="btn-success !py-1 !px-2.5 text-[11px]"
                             onClick={() => void convert([j._id])}
                             disabled={converting}
-                            title={`Convert order ${j.no} to a sales bill`}
+                            title={`Convert order ${orderNo(j)} to a sales bill`}
                           >
                             Convert →
                           </button>

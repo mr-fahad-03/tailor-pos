@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { fmt, fmtAEDTile, fmtDate, todayISO } from '@/lib/format';
+import { fmt, fmtAEDTile, fmtDate, orderNo, todayISO } from '@/lib/format';
 import type { DashboardSummary } from '@/lib/types';
 import { Donut, DonutKey, type DonutSlice } from '@/components/Donut';
 import { Card, SectionTitle, EmptyState, StatusBadge } from '@/components/ui';
@@ -243,7 +243,7 @@ export default function DashboardPage() {
                       {data.recentJobCards.map((j) => (
                         <tr key={j._id} className="hover:bg-ink-50/70">
                           <td className="td font-bold text-brand-700">
-                            <Link href={`/job-cards/${j._id}`}>{j.no}</Link>
+                            <Link href={`/job-cards/${j._id}`}>{orderNo(j)}</Link>
                           </td>
                           <td className="td font-mono text-xs">{j.ref}</td>
                           <td className="td font-medium">{j.partyName || '—'}</td>

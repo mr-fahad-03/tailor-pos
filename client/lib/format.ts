@@ -52,3 +52,13 @@ export const num = (v: unknown, fallback = 0): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 };
+
+/**
+ * What to show in a "No" column. A draft has not taken an order number yet,
+ * so it shows its own draft number instead of an empty cell.
+ */
+export const orderNo = (card: { no?: number; draftNo?: number }): string => {
+  if (card.no != null) return String(card.no);
+  if (card.draftNo != null) return `DRAFT-${card.draftNo}`;
+  return '—';
+};
