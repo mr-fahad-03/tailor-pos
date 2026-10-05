@@ -35,7 +35,7 @@ export default function PaymentsPage() {
   return (
     <div>
       <h1 className="page-title">Payments</h1>
-      <p className="page-sub">Advances and part payments collected against job cards.</p>
+      <p className="page-sub">Advances and part payments collected against stitching orders.</p>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard title="Total Collected" value={`${fmt(total)} AED`} sub={`${rows.length} payments`} icon="coins" tone="brand" />
@@ -52,7 +52,7 @@ export default function PaymentsPage() {
           </div>
         ) : rows.length === 0 ? (
           <div className="p-6">
-            <EmptyState title="No payments yet" sub="Record a part payment from any job card." />
+            <EmptyState title="No payments yet" sub="Record a part payment from any stitching order." />
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -60,7 +60,7 @@ export default function PaymentsPage() {
               <thead>
                 <tr className="border-b border-ink-100 bg-ink-50/60">
                   <th className="th">Date</th>
-                  <th className="th">Job Card</th>
+                  <th className="th">Stitching</th>
                   <th className="th">Customer</th>
                   <th className="th">Mode</th>
                   <th className="th">Bank / Ref</th>

@@ -454,7 +454,7 @@ export default function UsersPage() {
           <p className="text-sm leading-relaxed text-ink-700">
             Permanently delete <strong className="font-bold">{confirmDelete.name}</strong> (
             <span className="font-mono text-xs">@{confirmDelete.username}</span>)? They will lose
-            access immediately. Job cards and bills they created are kept.
+            access immediately. Stitching orders and bills they created are kept.
           </p>
         </Modal>
       )}

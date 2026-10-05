@@ -56,7 +56,7 @@ export default function DashboardPage() {
               tone="ink"
             />
             <StatCard
-              title="Open Job Cards"
+              title="Open Stitching"
               value={String(data.openJobCards)}
               sub="awaiting stitching / delivery"
               icon="scissors"
@@ -74,7 +74,7 @@ export default function DashboardPage() {
           <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
             <Card className="p-5 xl:col-span-2">
               <SectionTitle
-                title="Recent Job Cards"
+                title="Recent Stitching"
                 sub="Latest orders in the workshop"
                 right={
                   <Link href="/job-cards" className="btn-soft !py-1.5 text-xs">
@@ -83,7 +83,7 @@ export default function DashboardPage() {
                 }
               />
               {data.recentJobCards.length === 0 ? (
-                <EmptyState title="No job cards yet" sub="Create your first job card to get started." />
+                <EmptyState title="No stitching orders yet" sub="Create your first stitching order to get started." />
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full">

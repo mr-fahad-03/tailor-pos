@@ -148,7 +148,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') router.push(`/job-cards?q=${encodeURIComponent(q)}`);
               }}
-              placeholder="Search job cards, bills, customers… (Enter)"
+              placeholder="Search stitching orders, bills, customers… (Enter)"
               className="input !rounded-lg !bg-ink-50 pl-10 focus:!bg-white"
             />
           </div>

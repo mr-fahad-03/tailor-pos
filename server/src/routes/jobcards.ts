@@ -90,7 +90,7 @@ interface JobCardBody {
   creditCardNo?: string;
 }
 
-/** Build the computed portions of a job card from the request body. */
+/** Build the computed portions of a stitching order from the request body. */
 function buildComputed(body: JobCardBody) {
   const taxRate = body.taxRate !== undefined ? num(body.taxRate, DEFAULT_TAX_RATE) : DEFAULT_TAX_RATE;
   const items = (body.items ?? [])
@@ -158,12 +158,12 @@ jobCardRouter.get(
     )
       .sort({ no: dir === 'prev' ? -1 : 1 })
       .lean();
-    if (!doc) throw new HttpError(404, 'No further job card');
+    if (!doc) throw new HttpError(404, 'No further stitching order');
     res.json(doc);
   }),
 );
 
-// GET /jobcards/payments/all -> flattened payment history across job cards
+// GET /jobcards/payments/all -> flattened payment history across stitching orders
 jobCardRouter.get(
   '/payments/all',
   requirePerm('payments.view'),
@@ -252,7 +252,7 @@ jobCardRouter.get(
   requirePerm('jobcards.view'),
   asyncHandler(async (req, res) => {
     const doc = await JobCard.findById(req.params.id).lean();
-    if (!doc) throw new HttpError(404, 'Job card not found');
+    if (!doc) throw new HttpError(404, 'Stitching order not found');
     res.json(doc);
   }),
 );
@@ -264,9 +264,9 @@ jobCardRouter.put(
   asyncHandler(async (req, res) => {
     const body = (req.body ?? {}) as JobCardBody & { advance?: number };
     const existing = await JobCard.findById(req.params.id);
-    if (!existing) throw new HttpError(404, 'Job card not found');
+    if (!existing) throw new HttpError(404, 'Stitching order not found');
     if (existing.status === 'converted')
-      throw new HttpError(400, 'Converted job cards cannot be edited');
+      throw new HttpError(400, 'Converted stitching orders cannot be edited');
 
     const computed = buildComputed(body);
     const paymentsTotal = r2(
@@ -361,9 +361,9 @@ jobCardRouter.post(
   asyncHandler(async (req, res) => {
     const body = (req.body ?? {}) as PaymentBody;
     const doc = await JobCard.findById(req.params.id);
-    if (!doc) throw new HttpError(404, 'Job card not found');
+    if (!doc) throw new HttpError(404, 'Stitching order not found');
     if (doc.status === 'converted')
-      throw new HttpError(400, 'Job card already converted to sales');
+      throw new HttpError(400, 'Stitching order already converted to sales');
     applyPayment(doc, body, DEFAULT_TAX_RATE);
     await doc.save();
     res.status(201).json(doc);
@@ -376,8 +376,8 @@ jobCardRouter.post(
   requirePerm('jobcards.close'),
   asyncHandler(async (req, res) => {
     const doc = await JobCard.findById(req.params.id);
-    if (!doc) throw new HttpError(404, 'Job card not found');
-    if (doc.status !== 'open') throw new HttpError(400, 'Only open job cards can be closed');
+    if (!doc) throw new HttpError(404, 'Stitching order not found');
+    if (doc.status !== 'open') throw new HttpError(400, 'Only open stitching orders can be closed');
     doc.status = 'closed';
     doc.closedAt = new Date();
     await doc.save();
@@ -391,8 +391,8 @@ jobCardRouter.post(
   requirePerm('jobcards.close'),
   asyncHandler(async (req, res) => {
     const doc = await JobCard.findById(req.params.id);
-    if (!doc) throw new HttpError(404, 'Job card not found');
-    if (doc.status !== 'closed') throw new HttpError(400, 'Only closed job cards can be reopened');
+    if (!doc) throw new HttpError(404, 'Stitching order not found');
+    if (doc.status !== 'closed') throw new HttpError(400, 'Only closed stitching orders can be reopened');
     doc.status = 'open';
     doc.closedAt = undefined;
     await doc.save();
@@ -408,16 +408,16 @@ interface ConvertBody {
   taxRate?: number;
 }
 
-// POST /jobcards/:id/convert -> creates a Sale, marks job card converted
+// POST /jobcards/:id/convert -> creates a Sale, marks stitching order converted
 jobCardRouter.post(
   '/:id/convert',
   requirePerm('jobcards.convert'),
   asyncHandler(async (req, res) => {
     const body = (req.body ?? {}) as ConvertBody;
     const doc = await JobCard.findById(req.params.id);
-    if (!doc) throw new HttpError(404, 'Job card not found');
+    if (!doc) throw new HttpError(404, 'Stitching order not found');
     if (doc.status === 'converted')
-      throw new HttpError(400, 'Job card already converted to sales');
+      throw new HttpError(400, 'Stitching order already converted to sales');
 
     const taxRate =
       body.taxRate !== undefined ? num(body.taxRate, DEFAULT_TAX_RATE) : DEFAULT_TAX_RATE;

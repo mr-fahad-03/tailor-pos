@@ -10,7 +10,7 @@ import { config } from './config';
 /**
  * Seed reference data: ledgers (from the old PAC "Find Ledger" screen),
  * core products, and the auto-number counters so numbering continues
- * where the old system left off (job cards at 13258, bills at 85934).
+ * where the old system left off (stitching orders at 13258, bills at 85934).
  *
  * Run with: npm run seed   (from server/)
  */

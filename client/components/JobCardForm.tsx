@@ -306,13 +306,13 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       if (mode === 'new') {
         const created = await api.jobCards.create(payload());
         await rememberPeople();
-        toast(`Job card ${created.no} saved`);
+        toast(`Stitching order ${created.no} saved`);
         router.push(`/job-cards/${created._id}`);
       } else if (docId) {
         const updated = await api.jobCards.update(docId, payload());
         await rememberPeople();
         loadDoc(updated);
-        toast(`Job card ${updated.no} updated`);
+        toast(`Stitching order ${updated.no} updated`);
       }
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Save failed', 'error');
@@ -335,7 +335,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       const d = await api.jobCards.adjacent(no, dir);
       router.push(`/job-cards/${d._id}`);
     } catch {
-      toast(dir === 'prev' ? 'This is the first job card' : 'This is the last job card', 'info');
+      toast(dir === 'prev' ? 'This is the first stitching order' : 'This is the last stitching order', 'info');
     }
   }
 
@@ -344,7 +344,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     try {
       const d = await api.jobCards.close(docId);
       loadDoc(d);
-      toast('Job card closed');
+      toast('Stitching order closed');
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Close failed', 'error');
     }
@@ -355,7 +355,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     try {
       const d = await api.jobCards.reopen(docId);
       loadDoc(d);
-      toast('Job card reopened');
+      toast('Stitching order reopened');
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Reopen failed', 'error');
     }
@@ -432,9 +432,9 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       {/* header */}
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="page-title">Job Card Entry</h1>
+          <h1 className="page-title">Stitching Entry</h1>
           <p className="page-sub">
-            {mode === 'new' ? 'Create a new tailoring order' : `Editing job card ${no ?? ''}`}
+            {mode === 'new' ? 'Create a new tailoring order' : `Editing stitching order ${no ?? ''}`}
           </p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -456,7 +456,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
       {readOnly && (
         <div className="mb-5 rounded-2xl border border-brand-200 bg-brand-50 px-5 py-3 text-sm font-semibold text-brand-800">
-          This job card has been converted to sales{invoiceNo ? ` (Bill ${invoiceNo})` : ''} and is read-only.
+          This stitching order has been converted to sales{invoiceNo ? ` (Bill ${invoiceNo})` : ''} and is read-only.
         </div>
       )}
 
@@ -813,7 +813,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
         title="Payment History"
-        sub={`Job card ${no ?? ''} · ${partyName}`}
+        sub={`Stitching order ${no ?? ''} · ${partyName}`}
         wide
       >
         {payments.length === 0 ? (
@@ -847,7 +847,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       <Modal
         open={findOpen}
         onClose={() => setFindOpen(false)}
-        title="Find Job Card"
+        title="Find Stitching"
         sub="Search by number, ref or customer"
         wide
         footer={

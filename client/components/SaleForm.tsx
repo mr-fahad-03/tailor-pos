@@ -171,7 +171,7 @@ export function SaleForm() {
       })),
     );
     setJcOpen(false);
-    toast(`Loaded job card ${j.ref} — advance ${fmt(j.advance)} AED applied`, 'info');
+    toast(`Loaded stitching order ${j.ref} — advance ${fmt(j.advance)} AED applied`, 'info');
   }
 
   async function save() {
@@ -230,7 +230,7 @@ export function SaleForm() {
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <div>
           <h1 className="page-title">{isReturn ? 'Sales Return' : 'Sales / Return'}</h1>
-          <p className="page-sub">Create a bill {jobCardRef && `from job card ${jobCardRef}`}</p>
+          <p className="page-sub">Create a bill {jobCardRef && `from stitching order ${jobCardRef}`}</p>
         </div>
         <div className="ml-auto flex gap-2">
           <button className="btn-soft" onClick={() => window.print()}>
@@ -313,7 +313,7 @@ export function SaleForm() {
           <Field label="Bill Date">
             <DateInput value={billDate} onChange={(e) => setBillDate(e.target.value)} />
           </Field>
-          <Field label="Job Card Ref">
+          <Field label="Stitching Ref">
             <div className="flex gap-2">
               <TextInput value={jobCardRef} readOnly placeholder="—" className="bg-ink-50 font-mono" />
               <button className="btn-soft shrink-0" onClick={() => { setJcOpen(true); setJcQ(''); setJcRows([]); }}>
@@ -472,8 +472,8 @@ export function SaleForm() {
       <Modal
         open={jcOpen}
         onClose={() => setJcOpen(false)}
-        title="Find Job Card for conversion"
-        sub="Open or closed job cards (not yet converted)"
+        title="Find Stitching for conversion"
+        sub="Open or closed stitching orders (not yet converted)"
         wide
         footer={<button className="btn-soft" onClick={() => setJcOpen(false)}>Cancel</button>}
       >

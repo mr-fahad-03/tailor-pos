@@ -31,7 +31,7 @@ function JobCardsInner() {
         setRows(r.items);
         setTotal(r.total);
       } catch (e) {
-        toast(e instanceof Error ? e.message : 'Failed to load job cards', 'error');
+        toast(e instanceof Error ? e.message : 'Failed to load stitching orders', 'error');
       } finally {
         setLoading(false);
       }
@@ -53,12 +53,12 @@ function JobCardsInner() {
     <div>
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="page-title">Job Cards</h1>
+          <h1 className="page-title">Stitching</h1>
           <p className="page-sub">{total} records</p>
         </div>
         {canManage && (
           <Link href="/job-cards/new" className="btn-primary ml-auto">
-            ＋ New Job Card
+            ＋ New Stitching
           </Link>
         )}
       </div>
@@ -91,7 +91,7 @@ function JobCardsInner() {
           </div>
         ) : rows.length === 0 ? (
           <div className="p-6">
-            <EmptyState title="No job cards found" sub="Try a different search or create a new one." />
+            <EmptyState title="No stitching orders found" sub="Try a different search or create a new one." />
           </div>
         ) : (
           <div className="overflow-x-auto">

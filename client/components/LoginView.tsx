@@ -51,7 +51,7 @@ export function LoginView() {
 
         <div className="relative">
           <h2 className="max-w-sm text-[32px] font-bold leading-[1.15] tracking-[-0.02em] text-white">
-            Job cards, measurements and billing in one place.
+            Stitching orders, measurements and billing in one place.
           </h2>
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-400">
             Every advance, part payment and VAT line is calculated on the server, so your books

@@ -7,7 +7,7 @@ import { AppShell } from '@/components/AppShell';
 
 export const metadata: Metadata = {
   title: 'Tailor POS — All in One',
-  description: 'Modern tailor shop point of sale: job cards, sales, ledgers, inventory.',
+  description: 'Modern tailor shop point of sale: stitching orders, sales, ledgers, inventory.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

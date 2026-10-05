@@ -19,7 +19,7 @@ export default function EditJobCardPage({ params }: { params: { id: string } }) 
         setDoc(await api.jobCards.get(params.id));
       } catch {
         setMissing(true);
-        toast('Job card not found', 'error');
+        toast('Stitching order not found', 'error');
       } finally {
         setLoading(false);
       }
@@ -37,7 +37,7 @@ export default function EditJobCardPage({ params }: { params: { id: string } }) 
   }
 
   if (missing || !doc) {
-    return <EmptyState title="Job card not found" sub="It may have been deleted." />;
+    return <EmptyState title="Stitching order not found" sub="It may have been deleted." />;
   }
 
   return <JobCardForm key={doc._id} mode="edit" initial={doc} />;

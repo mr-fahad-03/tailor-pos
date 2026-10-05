@@ -30,10 +30,10 @@ export default function SettingsPage() {
   return (
     <div className="max-w-2xl">
       <h1 className="page-title">Settings</h1>
-      <p className="page-sub">Defaults used across job cards and bills. Stored on this device.</p>
+      <p className="page-sub">Defaults used across stitching orders and bills. Stored on this device.</p>
 
       <Card className="mt-6 p-6">
-        <SectionTitle title="Business Defaults" sub="Applied to new job cards and sales bills" />
+        <SectionTitle title="Business Defaults" sub="Applied to new stitching orders and sales bills" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="VAT / Tax Rate (%)">
             <NumberInput

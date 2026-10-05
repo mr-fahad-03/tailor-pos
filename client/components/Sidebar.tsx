@@ -26,8 +26,8 @@ const NAV: NavGroup[] = [
   {
     section: 'Tailoring',
     items: [
-      { href: '/job-cards', label: 'Job Cards', icon: 'jobcards', permission: 'jobcards.view' },
-      { href: '/job-cards/new', label: 'New Job Card', icon: 'plus', permission: 'jobcards.create' },
+      { href: '/job-cards', label: 'Stitching', icon: 'jobcards', permission: 'jobcards.view' },
+      { href: '/job-cards/new', label: 'New Stitching', icon: 'plus', permission: 'jobcards.create' },
     ],
   },
   {

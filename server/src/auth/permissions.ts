@@ -46,11 +46,11 @@ export const PERMISSION_GROUPS: { group: string; items: { key: Permission; label
     items: [{ key: 'dashboard.view', label: 'View dashboard' }],
   },
   {
-    group: 'Job Cards',
+    group: 'Stitching',
     items: [
-      { key: 'jobcards.view', label: 'View job cards' },
-      { key: 'jobcards.create', label: 'Create job cards' },
-      { key: 'jobcards.edit', label: 'Edit job cards' },
+      { key: 'jobcards.view', label: 'View stitching orders' },
+      { key: 'jobcards.create', label: 'Create stitching orders' },
+      { key: 'jobcards.edit', label: 'Edit stitching orders' },
       { key: 'jobcards.payment', label: 'Take payments / advances' },
       { key: 'jobcards.close', label: 'Close & reopen' },
       { key: 'jobcards.convert', label: 'Convert to sale' },
