@@ -532,8 +532,13 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     setItems((rows) => {
       let out = [...rows];
 
+      // Rows row-for-person only while nobody has deleted one. Once the counts
+      // diverge the positions no longer mean anything, so the reconciliation
+      // below keeps its hands off rather than guessing at the wrong row.
+      const aligned = out.length === before.length;
+
       // A person was removed: drop their row so the rest stay aligned.
-      if (next.length < before.length) {
+      if (aligned && next.length < before.length) {
         const gone = before
           .map((p, i) => (next.some((n) => n.uid === p.uid) ? -1 : i))
           .filter((i) => i >= 0);
@@ -549,14 +554,16 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         out = [...out.slice(0, at), ...added, ...out.slice(at)];
       }
 
-      // An order loaded with fewer rows than people still gets one each.
-      while (out.length < next.length) out.push(emptyItem());
+      // Deliberately no padding back up to next.length here: rows are freely
+      // deletable, and every keystroke in a measurement runs through this
+      // function, so topping the list up would resurrect a deleted row the
+      // moment someone typed a chest size.
 
       // Stitching two thobes for someone means two of that line.
       return out.map((r, i) => {
         const person = next[i];
         const was = before[i];
-        if (person && was && person.uid === was.uid && person.qty !== was.qty) {
+        if (aligned && person && was && person.uid === was.uid && person.qty !== was.qty) {
           return { ...r, qty: String(person.qty ?? 1) };
         }
         return r;
@@ -651,7 +658,10 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 />
               </Field>
               <Field label="Book No" className="sm:col-span-2">
-                <NumberInput value={bookNo} onChange={(e) => setBookNo(e.target.value)} disabled={readOnly} />
+                {/* An identifier, not a figure: it reads left like Invoice No and
+                    Ref beside it, rather than right like Qty, Rate and Amount.
+                    `!` because NumberInput's own text-right would otherwise win. */}
+                <NumberInput value={bookNo} onChange={(e) => setBookNo(e.target.value)} disabled={readOnly} className="!text-left" />
               </Field>
               <Field label="Ref" className="sm:col-span-4">
                 <div className="flex gap-2">
@@ -685,8 +695,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 <thead className="bg-ink-50">
                   <tr>
                     <th className="th w-10">Sl</th>
-                    <th className="th w-36">Code</th>
-                    <th className="th">Product Name</th>
+                    <th className="th">Product</th>
                     <th className="th w-24 text-right">Qty</th>
                     <th className="th w-28 text-right">Rate</th>
                     <th className="th w-28 text-right">Amount</th>
@@ -698,29 +707,24 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                     const c = calc.rows[i];
                     return (
                       <tr key={i}>
-                        <td className="td align-top text-ink-400">
-                          {i + 1}
-                          {sets[i] && (
-                            <span className="block max-w-[7rem] truncate text-[10px] font-semibold text-brand-700">
-                              {sets[i].name.trim() || `Person ${i + 1}`}
-                            </span>
-                          )}
-                        </td>
+                        <td className="td text-ink-400">{i + 1}</td>
                         <td className="td">
-                          <ProductSearchInput
-                            value={r.code}
-                            onChange={(v) => updateItem(i, { code: v })}
-                            onPick={(p) => pickProduct(i, p)}
-                          />
-                        </td>
-                        <td className="td">
-                          <TextInput
-                            value={r.productName}
-                            onChange={(e) => updateItem(i, { productName: e.target.value })}
-                            disabled={readOnly}
-                            className="input-sm"
-                            placeholder="Product name"
-                          />
+                          <div className="flex items-center gap-2">
+                            {r.code && (
+                              <span className="shrink-0 rounded bg-ink-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-brand-700">
+                                {r.code}
+                              </span>
+                            )}
+                            <ProductSearchInput
+                              value={r.productName}
+                              onChange={(v) => updateItem(i, { productName: v, code: '' })}
+                              onPick={(p) => pickProduct(i, p)}
+                              disabled={readOnly}
+                              usableAs="item"
+                              placeholder="Type a code or product name…"
+                              className=""
+                            />
+                          </div>
                         </td>
                         <td className="td">
                           <NumberInput value={r.qty} onChange={(e) => updateItem(i, { qty: e.target.value })} disabled={readOnly} className="input-sm" />
@@ -730,23 +734,14 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                         </td>
                         <td className="td text-right font-bold tabular-nums">{fmt(c?.amount ?? 0)}</td>
                         {!readOnly && (
-                          <td className="td align-top">
-                            {i < sets.length ? (
-                              <span
-                                className="cursor-help text-ink-300"
-                                title={`This row belongs to ${sets[i].name.trim() || `person ${i + 1}`} — remove that person to remove the row`}
-                              >
-                                🔒
-                              </span>
-                            ) : (
-                              <button
-                                className="text-rose-500 hover:text-rose-700"
-                                onClick={() => setItems((rows) => rows.filter((_, idx) => idx !== i))}
-                                title="Remove row"
-                              >
-                                ✕
-                              </button>
-                            )}
+                          <td className="td">
+                            <button
+                              className="text-rose-500 hover:text-rose-700"
+                              onClick={() => setItems((rows) => rows.filter((_, idx) => idx !== i))}
+                              title="Remove row"
+                            >
+                              ✕
+                            </button>
                           </td>
                         )}
                       </tr>

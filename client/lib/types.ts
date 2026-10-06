@@ -11,6 +11,13 @@ export interface Ledger {
 /** Where a product may be used: a charged line, a consumed material, or both. */
 export type ProductUsage = 'item' | 'material' | 'both';
 
+/**
+ * What a picker is picking for. `both` is never asked for directly — a product
+ * marked `both` answers to either side, so the question is only ever "item?"
+ * or "material?".
+ */
+export type ProductUsagePicker = Exclude<ProductUsage, 'both'>;
+
 export const USAGE_LABEL: Record<ProductUsage, string> = {
   item: 'Item',
   material: 'Material',

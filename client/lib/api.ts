@@ -10,6 +10,7 @@ import type {
   Page,
   PermissionCatalog,
   Product,
+  ProductUsagePicker,
   Role,
   Sale,
 } from './types';
@@ -155,8 +156,11 @@ export const api = {
   },
 
   products: {
-    list: (q = '', page = 1, limit = 50) =>
-      get<Page<Product>>(`/products?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`),
+    list: (q = '', page = 1, limit = 50, usableAs?: ProductUsagePicker) =>
+      get<Page<Product>>(
+        `/products?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}` +
+          (usableAs ? `&usableAs=${usableAs}` : ''),
+      ),
     create: (body: Partial<Product>) => post<Product>('/products', body),
     update: (id: string, body: Partial<Product>) => put<Product>(`/products/${id}`, body),
     remove: (id: string) => del<{ ok: boolean }>(`/products/${id}`),

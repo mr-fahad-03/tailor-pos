@@ -10,20 +10,34 @@ export const productRouter = Router();
 productRouter.use(requireAuth);
 
 function searchFilter(q?: string) {
-  if (!q) return {};
+  if (!q) return null;
   const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
   return { $or: [{ name: rx }, { code: rx }] };
 }
 
-// GET /products?q=&category=&page=&limit=
+/**
+ * Narrow the catalogue to what a given picker may offer: the order's line
+ * items take products marked `item`, the materials table takes `material`,
+ * and `both` shows up in either. Products saved before `usage` existed have
+ * no value for it and count as `both`, matching the model's default.
+ */
+function usageFilter(usableAs?: string) {
+  if (usableAs !== 'item' && usableAs !== 'material') return null;
+  return { $or: [{ usage: { $in: [usableAs, 'both'] } }, { usage: { $exists: false } }] };
+}
+
+// GET /products?q=&category=&usableAs=&page=&limit=
 productRouter.get(
   '/',
   requirePerm('products.view'),
   asyncHandler(async (req, res) => {
-    const { q, category } = req.query as { q?: string; category?: string };
+    const { q, category, usableAs } = req.query as { q?: string; category?: string; usableAs?: string };
     const page = Math.max(num(req.query.page, 1), 1);
     const limit = Math.min(Math.max(num(req.query.limit, 50), 1), 500);
-    const filter: Record<string, unknown> = { ...searchFilter(q) };
+    // Both halves are `$or`s, so they have to be combined under `$and` rather
+    // than spread into one object, where the second would clobber the first.
+    const clauses = [searchFilter(q), usageFilter(usableAs)].filter(Boolean);
+    const filter: Record<string, unknown> = clauses.length ? { $and: clauses } : {};
     if (category) filter.category = category;
     const [items, total] = await Promise.all([
       Product.find(filter).sort({ code: 1 }).skip((page - 1) * limit).limit(limit).lean(),

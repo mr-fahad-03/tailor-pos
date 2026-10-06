@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import { AnchoredDropdown } from '@/components/AnchoredDropdown';
 import { api } from '@/lib/api';
 import { fmt } from '@/lib/format';
-import type { Product } from '@/lib/types';
+import type { Product, ProductUsagePicker } from '@/lib/types';
 
 /**
- * Code input with a live product search dropdown.
- * Typing searches; picking a row calls onPick(product).
+ * One box for a product: a code or a name both search it, and picking a row
+ * calls onPick(product). `usableAs` narrows the catalogue to what this picker
+ * is allowed to offer; left off, everything shows.
  */
 export function ProductSearchInput({
   value,
@@ -16,6 +17,7 @@ export function ProductSearchInput({
   onPick,
   placeholder = 'Code',
   disabled,
+  usableAs,
   /** Codes read better monospaced; a product name does not. */
   className = 'font-mono uppercase',
 }: {
@@ -24,6 +26,7 @@ export function ProductSearchInput({
   onPick: (p: Product) => void;
   placeholder?: string;
   disabled?: boolean;
+  usableAs?: ProductUsagePicker;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -45,17 +48,19 @@ export function ProductSearchInput({
     if (!open || disabled) return;
     const t = setTimeout(async () => {
       try {
-        const r = await api.products.list(value, 1, 8);
+        const r = await api.products.list(value, 1, 8, usableAs);
         setResults(r.items);
       } catch {
         setResults([]);
       }
     }, 250);
     return () => clearTimeout(t);
-  }, [value, open, disabled]);
+  }, [value, open, disabled, usableAs]);
 
   return (
-    <div ref={wrapRef} className="relative">
+    // `flex-1 min-w-0` so that sitting next to a code chip in a flex row does
+    // not shrink the box to an <input>'s intrinsic ~20-character width.
+    <div ref={wrapRef} className="relative w-full min-w-0 flex-1">
       <input
         value={value}
         placeholder={placeholder}

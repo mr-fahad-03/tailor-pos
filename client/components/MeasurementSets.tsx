@@ -419,8 +419,8 @@ export function MeasurementSets({
                           <table className="w-full min-w-[480px]">
                             <thead className="bg-ink-50">
                               <tr>
-                                <th className="th w-32">Code</th>
-                                <th className="th">Product Name</th>
+                                <th className="th w-8">Sl</th>
+                                <th className="th">Product</th>
                                 <th className="th w-20 text-right">Qty</th>
                                 <th className="th w-24 text-right">Rate</th>
                                 <th className="th w-24 text-right">Amount</th>
@@ -430,24 +430,24 @@ export function MeasurementSets({
                             <tbody className="divide-y divide-ink-100">
                               {(s.materials ?? []).map((m, i) => (
                                 <tr key={i}>
+                                  <td className="td !px-2 !py-1.5 text-ink-400">{i + 1}</td>
                                   <td className="td !px-2 !py-1.5">
-                                    <ProductSearchInput
-                                      value={m.code ?? ''}
-                                      onChange={(v) => patchMaterial(s.uid, i, { code: v })}
-                                      onPick={(pr) => pickMaterial(s.uid, i, pr)}
-                                      disabled={readOnly}
-                                      placeholder="Code"
-                                    />
-                                  </td>
-                                  <td className="td !px-2 !py-1.5">
-                                    <ProductSearchInput
-                                      value={m.productName ?? ''}
-                                      onChange={(v) => patchMaterial(s.uid, i, { productName: v })}
-                                      onPick={(pr) => pickMaterial(s.uid, i, pr)}
-                                      disabled={readOnly}
-                                      placeholder="Start typing a material…"
-                                      className=""
-                                    />
+                                    <div className="flex items-center gap-2">
+                                      {m.code && (
+                                        <span className="shrink-0 rounded bg-ink-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-brand-700">
+                                          {m.code}
+                                        </span>
+                                      )}
+                                      <ProductSearchInput
+                                        value={m.productName ?? ''}
+                                        onChange={(v) => patchMaterial(s.uid, i, { productName: v, code: '' })}
+                                        onPick={(pr) => pickMaterial(s.uid, i, pr)}
+                                        disabled={readOnly}
+                                        usableAs="material"
+                                        placeholder="Type a code or material name…"
+                                        className=""
+                                      />
+                                    </div>
                                   </td>
                                   <td className="td !px-2 !py-1.5">
                                     <NumberInput
