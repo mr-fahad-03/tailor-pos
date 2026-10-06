@@ -98,7 +98,8 @@ export interface Product {
   usage?: ProductUsage;
   rate: number;
   wholesaleRate: number;
-  category: 'stitching' | 'fabric' | 'material';
+  /** Free text: the shop defines its own categories. */
+  category: string;
   unit: string;
   stockQty: number;
 }

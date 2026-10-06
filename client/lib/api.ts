@@ -174,6 +174,10 @@ export const api = {
           (usableAs ? `&usableAs=${usableAs}` : ''),
       ),
     create: (body: Partial<Product>) => post<Product>('/products', body),
+    /** Everything the category dropdown should offer, already de-duplicated. */
+    categories: () => get<{ items: string[] }>('/products/categories'),
+    addCategory: (name: string) =>
+      post<{ name: string; existed: boolean }>('/products/categories', { name }),
     update: (id: string, body: Partial<Product>) => put<Product>(`/products/${id}`, body),
     remove: (id: string) => del<{ ok: boolean }>(`/products/${id}`),
   },

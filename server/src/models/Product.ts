@@ -1,6 +1,10 @@
 import { Schema, model, models, Document } from 'mongoose';
 
-export type ProductCategory = 'stitching' | 'fabric' | 'material';
+/**
+ * What a product is. Free text rather than a fixed list: the shop defines its
+ * own categories, and an enum here would reject every one it adds.
+ */
+export type ProductCategory = string;
 
 /**
  * Where a product may be used on an order: as a charged line item, as a
@@ -26,11 +30,7 @@ const productSchema = new Schema<IProduct>(
     name: { type: String, required: true, trim: true },
     rate: { type: Number, default: 0 },
     wholesaleRate: { type: Number, default: 0 },
-    category: {
-      type: String,
-      enum: ['stitching', 'fabric', 'material'],
-      default: 'stitching',
-    },
+    category: { type: String, trim: true, default: 'stitching' },
     // 'both' by default so a product added before this existed stays usable
     // everywhere rather than quietly vanishing from one of the two pickers.
     usage: {

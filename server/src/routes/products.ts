@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { Product } from '../models/Product';
+import { ProductCategory } from '../models/ProductCategory';
 import { asyncHandler, HttpError } from '../middleware';
 import { num } from '../utils/money';
 import { requireAuth, requirePerm } from '../auth/guard';
@@ -66,6 +67,75 @@ productRouter.post(
       stockQty: num(stockQty),
     });
     res.status(201).json(product);
+  }),
+);
+
+/**
+ * The three the app shipped with. They are offered even before anyone has
+ * defined a category, so the dropdown is never empty on a fresh install.
+ */
+const BUILT_IN_CATEGORIES = ['stitching', 'fabric', 'material'];
+
+/**
+ * GET /products/categories
+ *
+ * Everything the dropdown should offer: the categories someone has defined,
+ * the built-in three, and any value already sitting on a product. That last
+ * part matters — a product saved under a category that was later renamed or
+ * removed would otherwise show a blank box that silently rewrites its
+ * category the moment anyone saves the form.
+ *
+ * Declared above `/:id`, or Express would read "categories" as an id.
+ */
+productRouter.get(
+  '/categories',
+  requirePerm('products.view'),
+  asyncHandler(async (_req, res) => {
+    const [defined, inUse] = await Promise.all([
+      ProductCategory.find().sort({ name: 1 }).lean(),
+      Product.distinct('category'),
+    ]);
+    const seen = new Map<string, string>();
+    for (const name of [
+      ...BUILT_IN_CATEGORIES,
+      ...(defined as unknown as { name: string }[]).map((c) => c.name),
+      ...(inUse as unknown[]).map((c) => String(c ?? '')),
+    ]) {
+      const clean = name.trim();
+      if (clean && !seen.has(clean.toLowerCase())) seen.set(clean.toLowerCase(), clean);
+    }
+    res.json({
+      items: [...seen.values()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+    });
+  }),
+);
+
+// POST /products/categories
+productRouter.post(
+  '/categories',
+  requirePerm('products.manage'),
+  asyncHandler(async (req, res) => {
+    const name = String((req.body ?? {}).name ?? '').trim();
+    if (!name) throw new HttpError(400, 'Category name is required');
+    if (name.length > 60) throw new HttpError(400, 'Category name is too long');
+
+    // Case-insensitively already there, as a row or on a product: hand back
+    // the spelling in use rather than creating a near-duplicate.
+    const [existingRow, inUse] = await Promise.all([
+      ProductCategory.findOne({ name }).collation({ locale: 'en', strength: 2 }).lean(),
+      Product.distinct('category'),
+    ]);
+    const match =
+      (existingRow as unknown as { name: string } | null)?.name ??
+      [...BUILT_IN_CATEGORIES, ...(inUse as unknown[]).map(String)].find(
+        (c) => c.trim().toLowerCase() === name.toLowerCase(),
+      );
+    if (match) {
+      res.status(200).json({ name: match, existed: true });
+      return;
+    }
+    const created = await ProductCategory.create({ name });
+    res.status(201).json({ name: created.name, existed: false });
   }),
 );
 

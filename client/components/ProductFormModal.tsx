@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import type { Product, ProductUsage } from '@/lib/types';
 import { Field, Select, TextInput } from '@/components/ui';
 import { Modal } from '@/components/Modal';
+import { CategorySelect } from '@/components/CategorySelect';
 import { useToast } from '@/components/Toast';
 
 type Form = {
@@ -12,7 +13,7 @@ type Form = {
   name: string;
   rate: string;
   wholesaleRate: string;
-  category: 'stitching' | 'fabric' | 'material';
+  category: string;
   usage: ProductUsage;
   unit: string;
   stockQty: string;
@@ -137,11 +138,10 @@ export function ProductFormModal({
           <TextInput value={form.code} onChange={set('code')} placeholder="e.g. 5002" className="font-mono uppercase" />
         </Field>
         <Field label="Category">
-          <Select value={form.category} onChange={set('category')}>
-            <option value="stitching">Stitching</option>
-            <option value="fabric">Fabric</option>
-            <option value="material">Material</option>
-          </Select>
+          <CategorySelect
+            value={form.category}
+            onChange={(v) => setForm((f) => ({ ...f, category: v }))}
+          />
         </Field>
         <Field label="Rate (AED)">
           <TextInput type="number" value={form.rate} onChange={set('rate')} className="text-right" />
