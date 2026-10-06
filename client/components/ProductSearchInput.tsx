@@ -13,9 +13,12 @@ import type { Product, ProductUsagePicker } from '@/lib/types';
  * calls onPick(product). `usableAs` narrows the catalogue to what this picker
  * is allowed to offer; left off, everything shows.
  *
- * `allowCreate` adds a ＋ beside it for a product that is not in the catalogue
- * yet. It opens the same form the Products screen uses, pre-classified for
- * this picker, and the saved product is selected into the row straight away.
+ * `allowCreate` offers a product that is not in the catalogue yet at the foot
+ * of the list, worded with whatever was typed. It opens the same form the
+ * Products screen uses, pre-classified for this picker, and the saved product
+ * is selected into the row straight away. The offer appears where the missing
+ * product was looked for, rather than behind a ＋ that is there whether or not
+ * anything is missing.
  */
 export function ProductSearchInput({
   value,
@@ -68,6 +71,17 @@ export function ProductSearchInput({
     return () => clearTimeout(t);
   }, [value, open, disabled, usableAs]);
 
+  // Nothing in the catalogue is spelled exactly this way, so it is worth
+  // offering to add it. A fuzzy match is not enough: typing "Shirt XL" while
+  // "Shirt" exists is still a product the shop has not got.
+  const typed = value.trim();
+  const known = results.some(
+    (p) =>
+      p.name.toLowerCase() === typed.toLowerCase() ||
+      (p.code ?? '').toLowerCase() === typed.toLowerCase(),
+  );
+  const offerCreate = canCreate && typed.length > 0 && !known;
+
   return (
     // `flex-1 min-w-0` so that sitting next to a code chip in a flex row does
     // not shrink the box to an <input>'s intrinsic ~20-character width.
@@ -88,22 +102,20 @@ export function ProductSearchInput({
           if (e.key === 'Enter' && results.length > 0) {
             onPick(results[0]);
             setOpen(false);
+          } else if (e.key === 'Enter' && offerCreate) {
+            // Nothing to pick, but something worth adding.
+            setCreating(true);
+            setOpen(false);
           }
         }}
         className={`input input-sm ${className}`}
       />
-      {canCreate && (
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          title="Add a product that is not in the catalogue yet"
-          aria-label="New product"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-ink-300 text-ink-500 transition hover:border-brand-500 hover:bg-brand-50 hover:text-brand-700"
-        >
-          ＋
-        </button>
-      )}
-      <AnchoredDropdown anchorRef={wrapRef} panelRef={panelRef} open={open && results.length > 0} width={288}>
+      <AnchoredDropdown
+        anchorRef={wrapRef}
+        panelRef={panelRef}
+        open={open && (results.length > 0 || offerCreate)}
+        width={288}
+      >
         <>
           {results.map((p) => (
             <button
@@ -122,9 +134,24 @@ export function ProductSearchInput({
               <span className="font-semibold tabular-nums text-ink-500">{fmt(p.rate)}</span>
             </button>
           ))}
-          <p className="border-t border-ink-100 px-3 py-1.5 text-[10px] text-ink-400">
-            F2 / Enter to pick first match
-          </p>
+          {offerCreate && (
+            <button
+              type="button"
+              onClick={() => {
+                setCreating(true);
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-2 border-t border-ink-100 px-3 py-2 text-left text-[13px] font-bold text-brand-700 hover:bg-brand-50"
+            >
+              <span aria-hidden>＋</span>
+              <span className="truncate">Add “{typed}” as a new product</span>
+            </button>
+          )}
+          {results.length > 0 && (
+            <p className="border-t border-ink-100 px-3 py-1.5 text-[10px] text-ink-400">
+              F2 / Enter to pick first match
+            </p>
+          )}
         </>
       </AnchoredDropdown>
       {canCreate && (

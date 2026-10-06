@@ -26,6 +26,7 @@ export const newSet = (over: Partial<EditableSet> = {}): EditableSet => ({
   // on the record so an older order re-saved here keeps what it was saved
   // with — the line quantities live in Order Items.
   qty: 1,
+  age: null,
   values: {},
   materials: [blankMaterial()],
   remember: true,
@@ -60,16 +61,44 @@ export function MeasurementSets({
   onChange,
   ledgerId,
   readOnly,
+  revealToken = null,
 }: {
   sets: EditableSet[];
   onChange: (next: EditableSet[]) => void;
   ledgerId?: string;
   readOnly?: boolean;
+  /**
+   * Ask for one person's block to be opened and scrolled to. The timestamp is
+   * what makes a second request for the same person count — without it,
+   * clicking the same order line twice would be the same value and do nothing.
+   */
+  revealToken?: { uid: string; at: number } | null;
 }) {
   const { toast } = useToast();
   const [profiles, setProfiles] = useState<MeasurementProfile[]>([]);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  /** Briefly ringed after being jumped to, so the eye finds it on arrival. */
+  const [flash, setFlash] = useState('');
+
+  useEffect(() => {
+    if (!revealToken) return;
+    const { uid } = revealToken;
+    setCollapsed((c) => ({ ...c, [uid]: false }));
+    setFlash(uid);
+    // One tick later: a block that was shut is still shut this render, and
+    // scrolling to it now would aim at the collapsed height.
+    const scroll = setTimeout(() => {
+      document
+        .getElementById(`person-${uid}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 60);
+    const off = setTimeout(() => setFlash(''), 1600);
+    return () => {
+      clearTimeout(scroll);
+      clearTimeout(off);
+    };
+  }, [revealToken]);
 
   // Load the people already on file for this customer.
   const loadProfiles = useCallback(async () => {
@@ -298,7 +327,15 @@ export function MeasurementSets({
             const isShut = collapsed[s.uid];
             const filled = Object.values(s.values).filter(Boolean).length;
             return (
-              <div key={s.uid} className="rounded-lg border border-ink-200 bg-white">
+              <div
+                key={s.uid}
+                id={`person-${s.uid}`}
+                className={`rounded-lg border bg-white transition ${
+                  flash === s.uid
+                    ? 'border-brand-500 ring-2 ring-brand-300'
+                    : 'border-ink-200'
+                }`}
+              >
                 <div className="flex flex-wrap items-center gap-2 border-b border-ink-100 px-3 py-2.5">
                   <button
                     onClick={() => setCollapsed((c) => ({ ...c, [s.uid]: !isShut }))}
@@ -332,6 +369,23 @@ export function MeasurementSets({
                   <span className="hidden text-[11px] font-medium text-ink-400 sm:inline">
                     {filled}/{MEASURE_FIELDS.length}
                   </span>
+                  {/* Blank unless someone is asked: a child's thobe is cut
+                      differently, and 0 would read as an answer. */}
+                  <label className="flex shrink-0 items-center gap-2 text-xs font-semibold text-ink-500">
+                    Age
+                    <input
+                      type="number"
+                      min="0"
+                      max="120"
+                      value={s.age ?? ''}
+                      onChange={(e) =>
+                        patch(s.uid, { age: e.target.value === '' ? null : Number(e.target.value) })
+                      }
+                      disabled={readOnly}
+                      aria-label={`Age of ${s.name || 'this person'}`}
+                      className="input input-sm w-20 text-center tabular-nums"
+                    />
+                  </label>
                   {!readOnly && (
                     <button
                       onClick={() => remove(s.uid)}

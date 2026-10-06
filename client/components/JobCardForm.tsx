@@ -28,6 +28,7 @@ import {
 } from './ui';
 import { Modal } from './Modal';
 import { LedgerSearchModal } from './LedgerSearchModal';
+import { LedgerSearchInput } from './LedgerSearchInput';
 import {
   SplitTender,
   emptySplit,
@@ -38,6 +39,7 @@ import {
   type TenderMode,
 } from './SplitTender';
 import { ProductSearchInput } from './ProductSearchInput';
+import { AttachSizePicker } from './AttachSizePicker';
 import { Icon } from '@/components/icons';
 
 interface ItemRow {
@@ -45,8 +47,16 @@ interface ItemRow {
   productName: string;
   qty: string;
   rate: string;
+  /** The measurement set this line is stitched to, or '' for none. */
+  personUid: string;
 }
-const emptyItem = (): ItemRow => ({ code: '', productName: '', qty: '1', rate: '' });
+const emptyItem = (personUid = ''): ItemRow => ({
+  code: '',
+  productName: '',
+  qty: '1',
+  rate: '',
+  personUid,
+});
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 /**
@@ -68,8 +78,13 @@ function setsFromCard(card?: JobCard | null): EditableSet[] {
     const anyPerPerson = card.measurementSets.some((m) => (m.materials ?? []).length > 0);
     return card.measurementSets.map((m, i) =>
       newSet({
+        // Keep the uid the order was saved with, so the lines pointing at
+        // this person still find them. Older orders have none; they get a
+        // fresh one and simply start out unattached.
+        ...(m.uid ? { uid: m.uid } : {}),
         profileId: m.profileId,
         name: m.name ?? '',
+        age: m.age ?? null,
         fabric: m.fabric ?? '',
         size: m.size ?? '',
         qty: m.qty ?? 1,
@@ -123,20 +138,8 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   const [invoiceNo, setInvoiceNo] = useState(initial?.invoiceNo ?? '');
 
   // ---- grids ----
-  const [items, setItems] = useState<ItemRow[]>(
-    initial?.items?.length
-      ? initial.items.map((i) => ({
-          code: i.code ?? '',
-          productName: i.productName ?? '',
-          qty: String(i.qty ?? ''),
-          rate: String(i.rate ?? ''),
-        }))
-      : [emptyItem()],
-  );
-  const [discount, setDiscount] = useState(String(initial?.discount ?? '0'));
-  const [additionalCharges, setAdditionalCharges] = useState(
-    String(initial?.additionalCharges ?? '0'),
-  );
+  // People first, so the opening order line can be attached to the person it
+  // is obviously for.
   // One block per person. Old cards carry a single unnamed set, so lift that
   // into the new shape on open rather than losing it.
   const [sets, setSets] = useState<EditableSet[]>(() => {
@@ -146,6 +149,21 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     // left wholly blank, so this costs nothing if it goes unused.
     return saved.length === 0 && mode === 'new' ? [newSet()] : saved;
   });
+  const [items, setItems] = useState<ItemRow[]>(() =>
+    initial?.items?.length
+      ? initial.items.map((i) => ({
+          code: i.code ?? '',
+          productName: i.productName ?? '',
+          qty: String(i.qty ?? ''),
+          rate: String(i.rate ?? ''),
+          personUid: i.personUid ?? '',
+        }))
+      : [emptyItem(sets[0]?.uid ?? '')],
+  );
+  const [discount, setDiscount] = useState(String(initial?.discount ?? '0'));
+  const [additionalCharges, setAdditionalCharges] = useState(
+    String(initial?.additionalCharges ?? '0'),
+  );
   // No longer asked for on the form. Kept so that re-saving an order written
   // before the field was removed does not strip what it was saved with.
   const [fabricConsumption, setFabricConsumption] = useState(
@@ -175,10 +193,14 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
   // ---- ui ----
   const [saving, setSaving] = useState(false);
+  const [filing, setFiling] = useState(false);
   /** True once this form has been saved properly — stops a duplicate draft. */
   const settled = useRef(false);
+  // Only ever opened to add somebody: an existing customer is found by typing
+  // into the name box itself.
   const [ledgerOpen, setLedgerOpen] = useState(false);
-  const [ledgerMode, setLedgerMode] = useState<'search' | 'newCustomer'>('search');
+  /** Set when an order line is asked to show the person it is stitched to. */
+  const [reveal, setReveal] = useState<{ uid: string; at: number } | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [findQ, setFindQ] = useState('');
@@ -246,11 +268,14 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
    * so is not in the figure at all.
    */
   /**
-   * What the order cost the shop to make: the materials booked against each
-   * person, plus whatever the stitching itself was costed at. It sits just
-   * before the order amount, so the margin reads as the step between them.
+   * What the order cost the shop to make, and what is left over after it.
+   *
+   * The margin is taken against the items' own price — before VAT, which is
+   * the government's money rather than the shop's, and before the charges and
+   * discount that are settled at the till.
    */
   const totalCost = useMemo(() => r2(calc.materialTotal + num(jobCost)), [calc.materialTotal, jobCost]);
+  const margin = useMemo(() => r2(calc.total - totalCost), [calc.total, totalCost]);
 
   const priorDue = useMemo(() => {
     const all = due?.due ?? 0;
@@ -273,7 +298,13 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     setInvoiceNo(d.invoiceNo ?? '');
     setItems(
       d.items.length
-        ? d.items.map((i) => ({ code: i.code ?? '', productName: i.productName ?? '', qty: String(i.qty), rate: String(i.rate) }))
+        ? d.items.map((i) => ({
+            code: i.code ?? '',
+            productName: i.productName ?? '',
+            qty: String(i.qty),
+            rate: String(i.rate),
+            personUid: i.personUid ?? '',
+          }))
         : [emptyItem()],
     );
     setDiscount(String(d.discount));
@@ -302,7 +333,15 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       invoiceNo: invoiceNo.trim(),
       items: calc.rows
         .filter((r) => r.code || r.productName || r.qty || r.rate)
-        .map((r) => ({ code: r.code, productName: r.productName, qty: r.qty, rate: r.rate })),
+        .map((r) => ({
+          code: r.code,
+          productName: r.productName,
+          qty: r.qty,
+          rate: r.rate,
+          // Only a person still on the order counts; one who has been deleted
+          // would leave the line pointing at nobody.
+          personUid: sets.some((p) => p.uid === r.personUid) ? r.personUid : undefined,
+        })),
       additionalCharges: calc.additionalCharges,
       discount: calc.discount,
       taxRate,
@@ -312,8 +351,10 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       fabric: sets[0]?.fabric ?? '',
       size: sets[0]?.size ?? '',
       measurementSets: sets.map((m) => ({
+        uid: m.uid,
         profileId: m.profileId,
         name: m.name.trim(),
+        age: m.age ?? null,
         fabric: m.fabric,
         size: m.size,
         qty: Number(m.qty) || 0,
@@ -360,6 +401,45 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       );
     } catch {
       toast('Order saved, but the measurements could not be kept on file', 'error');
+    }
+  }
+
+  /**
+   * The Save under the measurements does two jobs, and neither of them is
+   * saving the order — that is the pair of buttons in the payment panel.
+   *
+   * It files everyone on the order against the customer, so their sizes are
+   * offered by name on the next order, and then opens a fresh order line for
+   * whatever is being made next. The line is opened either way: somebody who
+   * has not picked a customer yet still wants the row.
+   */
+  async function fileMeasurements() {
+    const keep = sets.filter((m) => m.remember !== false && m.name.trim());
+    setFiling(true);
+    try {
+      if (!ledgerId) {
+        toast('Measurements are filed against a customer — pick one above first', 'info');
+      } else if (keep.length === 0) {
+        toast('Give each person a name to keep their measurements on file', 'info');
+      } else {
+        await Promise.all(
+          keep.map((m) =>
+            api.measurements.save({
+              ledgerId,
+              name: m.name.trim(),
+              fabric: m.fabric,
+              size: m.size,
+              values: m.values,
+            }),
+          ),
+        );
+        toast(`${keep.length} ${keep.length === 1 ? 'person' : 'people'} kept on file`);
+      }
+      setItems((rows) => [...rows, emptyItem()]);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not keep the measurements on file', 'error');
+    } finally {
+      setFiling(false);
     }
   }
 
@@ -682,56 +762,25 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     setItems((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
   /**
-   * Order items are bound to the people on the order, position by position:
-   * row 1 is what is being stitched for person 1, row 2 for person 2, and so
-   * on. Adding a person adds their row; removing a person takes their row with
-   * them, so the two lists cannot drift out of step. Any rows past the last
-   * person are free — that is where an alteration charge or a loose sale goes.
+   * Adding somebody to the order no longer touches the order lines.
+   *
+   * Lines and people used to be bound by position — person 1 to row 1 — so
+   * adding a person inserted a row and removing one took a row away. The
+   * Attach Size column states that link outright now, which makes the implicit
+   * version both redundant and wrong: not every line is a garment for
+   * somebody, and nobody asked for a row they did not add.
+   *
+   * The one thing still worth doing automatically is letting go: a line
+   * attached to somebody who has just been taken off the order goes back to
+   * carrying no size, rather than naming a person who is not there.
    */
   function changeSets(next: EditableSet[]) {
-    const before = sets;
     setSets(next);
-
-    setItems((rows) => {
-      let out = [...rows];
-
-      // Rows row-for-person only while nobody has deleted one. Once the counts
-      // diverge the positions no longer mean anything, so the reconciliation
-      // below keeps its hands off rather than guessing at the wrong row.
-      const aligned = out.length === before.length;
-
-      // A person was removed: drop their row so the rest stay aligned.
-      if (aligned && next.length < before.length) {
-        const gone = before
-          .map((p, i) => (next.some((n) => n.uid === p.uid) ? -1 : i))
-          .filter((i) => i >= 0);
-        out = out.filter((_, i) => !gone.includes(i));
-      }
-
-      // A person was added: insert a fresh row at the end of the bound block,
-      // pushing any free rows below it down. Reusing a free row instead would
-      // quietly turn someone's alteration charge into the new person's line.
-      if (next.length > before.length) {
-        const at = Math.min(before.length, out.length);
-        const added = Array.from({ length: next.length - before.length }, emptyItem);
-        out = [...out.slice(0, at), ...added, ...out.slice(at)];
-      }
-
-      // Deliberately no padding back up to next.length here: rows are freely
-      // deletable, and every keystroke in a measurement runs through this
-      // function, so topping the list up would resurrect a deleted row the
-      // moment someone typed a chest size.
-
-      // Stitching two thobes for someone means two of that line.
-      return out.map((r, i) => {
-        const person = next[i];
-        const was = before[i];
-        if (aligned && person && was && person.uid === was.uid && person.qty !== was.qty) {
-          return { ...r, qty: String(person.qty ?? 1) };
-        }
-        return r;
-      });
-    });
+    setItems((rows) =>
+      rows.map((r) =>
+        !r.personUid || next.some((n) => n.uid === r.personUid) ? r : { ...r, personUid: '' },
+      ),
+    );
   }
 
   return (
@@ -791,12 +840,13 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 order the counter works: who the order is for and what it is
                 referenced by, then the book it came out of and its dates. */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-12">
-              <Field label="Party A/c (Customer)" className="col-span-2 sm:col-span-5">
-                <TextInput
+              <Field label="Party A/c (Customer)" className="col-span-2 sm:col-span-6">
+                <LedgerSearchInput
                   value={partyName}
-                  onChange={(e) => { setPartyName(e.target.value); setLedgerId(''); }}
+                  onChange={(v) => { setPartyName(v); setLedgerId(''); }}
+                  onPick={pickLedger}
                   disabled={readOnly}
-                  placeholder="Select from ledger…"
+                  placeholder="Start typing a customer's name…"
                   className="font-semibold"
                 />
                 {/* What they owed before this order was written, so whoever is
@@ -822,32 +872,20 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   </p>
                 )}
               </Field>
-              {/* Find an existing customer, or add one. Both act on the field
-                  beside them, so they sit together rather than either being
-                  spelled out in a button wide enough to say so. */}
-              <Field label="&nbsp;" className="sm:col-span-2">
-                <div className="flex gap-2">
+              {/* Only for somebody who is not on file yet — anyone who is
+                  turns up in the box beside this as their name is typed. */}
+              <Field label="&nbsp;" className="sm:col-span-1">
+                {canAddLedger && (
                   <button
-                    className="btn-soft shrink-0"
-                    onClick={() => { setLedgerMode('search'); setLedgerOpen(true); }}
+                    className="btn-soft w-full"
+                    onClick={() => setLedgerOpen(true)}
                     disabled={readOnly}
-                    title="Find an existing customer in the ledger"
-                    aria-label="Find ledger"
+                    title="Add a customer to the ledger and put them on this order"
+                    aria-label="New customer"
                   >
-                    <Icon name="search" className="h-[17px] w-[17px]" />
+                    <Icon name="plus" className="h-[17px] w-[17px]" />
                   </button>
-                  {canAddLedger && (
-                    <button
-                      className="btn-soft shrink-0"
-                      onClick={() => { setLedgerMode('newCustomer'); setLedgerOpen(true); }}
-                      disabled={readOnly}
-                      title="Add a customer to the ledger and put them on this order"
-                      aria-label="New customer"
-                    >
-                      <Icon name="plus" className="h-[17px] w-[17px]" />
-                    </button>
-                  )}
-                </div>
+                )}
               </Field>
               <Field label="Ref" className="col-span-2 sm:col-span-5">
                 <TextInput value={ref} onChange={(e) => setRef(e.target.value)} disabled={readOnly} className="font-mono" />
@@ -897,6 +935,10 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                     <th className="th">Product</th>
                     <th className="th w-24 text-right">Qty</th>
                     <th className="th w-28 text-right">Rate</th>
+                    {/* Not shouted like the figures either side of it: this
+                        column is a statement about the row, not a heading
+                        over a number. */}
+                    <th className="th w-40 text-center normal-case tracking-normal">Attach Size</th>
                     <th className="th w-28 text-right">Amount</th>
                     {!readOnly && <th className="th w-10" />}
                   </tr>
@@ -905,7 +947,21 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   {items.map((r, i) => {
                     const c = calc.rows[i];
                     return (
-                      <tr key={i}>
+                      <tr
+                        key={i}
+                        // Anywhere on the row that is not itself something to
+                        // press takes you to the person it is stitched for.
+                        // The boxes and buttons keep their own jobs.
+                        onClick={(e) => {
+                          if (!r.personUid) return;
+                          const el = e.target as HTMLElement;
+                          if (el.closest('input, button, select, textarea, a')) return;
+                          setReveal({ uid: r.personUid, at: Date.now() });
+                        }}
+                        className={
+                          r.personUid ? 'cursor-pointer transition hover:bg-brand-50/50' : undefined
+                        }
+                      >
                         <td className="td text-ink-400">{i + 1}</td>
                         <td className="td">
                           <div className="flex items-center gap-2">
@@ -931,6 +987,15 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                         </td>
                         <td className="td">
                           <NumberInput value={r.rate} onChange={(e) => updateItem(i, { rate: e.target.value })} disabled={readOnly} className="input-sm" />
+                        </td>
+                        <td className="td">
+                          <AttachSizePicker
+                            people={sets}
+                            value={r.personUid}
+                            onChange={(uid) => updateItem(i, { personUid: uid })}
+                            onReveal={(uid) => setReveal({ uid, at: Date.now() })}
+                            disabled={readOnly}
+                          />
                         </td>
                         <td className="td text-right font-bold tabular-nums">{fmt(c?.amount ?? 0)}</td>
                         {!readOnly && (
@@ -959,41 +1024,74 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               onChange={changeSets}
               ledgerId={ledgerId || undefined}
               readOnly={readOnly}
+              revealToken={reveal}
             />
 
-            {/* The cost built up from its parts, then what the order is
-                worth: materials, the stitching, the two added, and last what
-                the customer pays — so the margin is the step between the
-                final two. Ranged left, where the eye lands coming off the
-                measurements above. */}
-            <div className="mt-6 flex flex-wrap items-end justify-start gap-4 border-t border-ink-100 pt-5">
-              <Field label="Material Cost" className="w-40">
-                <TextInput
-                  value={fmt(calc.materialTotal)}
-                  readOnly
-                  title="Everything booked under Materials Used, for every person on this order"
-                  className="bg-ink-50 text-right font-bold tabular-nums"
-                />
-              </Field>
-              <Field label="Job Cost" className="w-40">
-                <NumberInput value={jobCost} onChange={(e) => setJobCost(e.target.value)} disabled={readOnly} />
-              </Field>
-              <Field label="Total Cost" className="w-40">
-                <TextInput
-                  value={fmt(totalCost)}
-                  readOnly
-                  title="Material Cost + Job Cost"
-                  className="bg-ink-50 text-right font-bold tabular-nums"
-                />
-              </Field>
-              <Field label="Total Order Amount" className="w-40">
-                <TextInput
-                  value={fmt(calc.netAmount)}
-                  readOnly
-                  title="What the customer pays, tax included"
-                  className="bg-ink-50 text-right font-bold tabular-nums"
-                />
-              </Field>
+            {/* What the order cost against what it sells for, read down the
+                left, with the one figure that matters set beside it. Three
+                short lines rather than four boxes: only one of them is typed
+                into, and boxing a figure nobody can change invites a try. */}
+            <div className="mt-6 flex flex-wrap items-center gap-x-10 gap-y-4 border-t border-ink-100 pt-5">
+              <dl className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <dt className="w-28 text-[11px] font-bold uppercase tracking-wider text-ink-500">
+                    Material Cost
+                  </dt>
+                  <dd
+                    className="text-sm font-black tabular-nums text-ink-900"
+                    title="Everything booked under Materials Used, for every person on this order"
+                  >
+                    : {fmt(calc.materialTotal)}
+                  </dd>
+                </div>
+                <div className="flex items-center gap-2">
+                  <dt className="w-28 text-[11px] font-bold uppercase tracking-wider text-ink-500">
+                    Job Cost
+                  </dt>
+                  <dd className="flex items-center gap-1.5 text-sm font-black text-ink-900">
+                    :
+                    <NumberInput
+                      value={jobCost}
+                      onChange={(e) => setJobCost(e.target.value)}
+                      disabled={readOnly}
+                      className="input-sm !w-24"
+                    />
+                  </dd>
+                </div>
+                <div className="flex items-center gap-2">
+                  <dt className="w-28 text-[11px] font-bold uppercase tracking-wider text-ink-900">
+                    Item Price
+                  </dt>
+                  <dd
+                    className="text-sm font-black tabular-nums text-ink-900"
+                    title="What the order items come to, before charges, discount and VAT"
+                  >
+                    : {fmt(calc.total)}
+                  </dd>
+                </div>
+              </dl>
+
+              <p className="flex items-baseline gap-2">
+                <span className="text-sm font-black text-rose-600">Margin:</span>
+                <span
+                  className={`text-xl font-black tabular-nums ${
+                    margin < 0 ? 'text-rose-600' : 'text-ink-900'
+                  }`}
+                >
+                  {fmt(margin)} <span className="text-xs">AED</span>
+                </span>
+              </p>
+
+              {canSave && (
+                <button
+                  className="ml-auto rounded-xl bg-brand-700 px-7 py-2.5 text-base font-black text-white transition hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={() => void fileMeasurements()}
+                  disabled={filing || readOnly}
+                  title="Keep these measurements on file and open a new order line"
+                >
+                  {filing ? 'Saving…' : 'Save'}
+                </button>
+              )}
             </div>
           </Card>
         </div>
@@ -1148,7 +1246,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         open={ledgerOpen}
         onClose={() => setLedgerOpen(false)}
         onSelect={pickLedger}
-        startIn={ledgerMode}
+        startIn="newCustomer"
         seedName={partyName}
       />
 

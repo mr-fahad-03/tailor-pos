@@ -9,8 +9,6 @@ import { TextInput } from './ui';
 import { useToast } from './Toast';
 import { useAuth } from './AuthContext';
 
-type LedgerType = 'customer' | 'supplier' | 'general';
-
 export function LedgerSearchModal({
   open,
   onClose,
@@ -36,10 +34,11 @@ export function LedgerSearchModal({
   const [loading, setLoading] = useState(false);
 
   // The counter often meets a customer who is not on file yet, so a new one
-  // can be created here without abandoning the order.
+  // can be created here without abandoning the order. Only a customer: this
+  // dialog is opened from an order and from a bill, and neither is ever made
+  // out to a supplier. Suppliers are added on their own screen.
   const [creating, setCreating] = useState(false);
-  /** Which kind of party the create form is opened for, and with what name. */
-  const [createType, setCreateType] = useState<LedgerType>('customer');
+  /** The name the create form is opened with. */
   const [seed, setSeed] = useState('');
 
   useEffect(() => {
@@ -47,7 +46,6 @@ export function LedgerSearchModal({
     setQ('');
     setPicked(null);
     if (startIn === 'newCustomer') {
-      setCreateType('customer');
       setSeed(seedName.trim());
       setCreating(true);
       return;
@@ -76,9 +74,8 @@ export function LedgerSearchModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, creating]);
 
-  function startCreate(type: LedgerType) {
+  function startCreate() {
     // Carry whatever was typed in the search box into the name.
-    setCreateType(type);
     setSeed(q.trim());
     setCreating(true);
   }
@@ -96,7 +93,7 @@ export function LedgerSearchModal({
           onSelect(l);
           onClose();
         }}
-        type={createType}
+        type="customer"
         seedName={seed}
         sub="Saved to your ledgers and added to this order"
         footerExtra={
@@ -147,14 +144,9 @@ export function LedgerSearchModal({
               className="min-w-0 flex-1"
             />
             {canManage && (
-              <>
-                <button className="btn-soft shrink-0" onClick={() => startCreate('customer')}>
-                  ＋ New customer
-                </button>
-                <button className="btn-soft shrink-0" onClick={() => startCreate('supplier')}>
-                  ＋ New supplier
-                </button>
-              </>
+              <button className="btn-soft shrink-0" onClick={startCreate}>
+                ＋ New customer
+              </button>
             )}
           </div>
           <div className="overflow-hidden rounded-xl border border-ink-200">
@@ -204,7 +196,7 @@ export function LedgerSearchModal({
                         {canManage && (
                           <button
                             className="btn-primary mt-3 !py-1.5 text-xs"
-                            onClick={() => startCreate('customer')}
+                            onClick={startCreate}
                           >
                             ＋ Add {q.trim() ? `“${q.trim()}”` : 'a new customer'}
                           </button>

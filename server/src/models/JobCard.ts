@@ -6,6 +6,12 @@ export interface IJobCardItem {
   qty: number;
   rate: number;
   amount: number;
+  /**
+   * The person on this order whose measurements this line is stitched to,
+   * by their set's `uid`. Blank means the line carries no size — an
+   * alteration charge, a loose sale, or simply not attached yet.
+   */
+  personUid?: string;
 }
 
 export interface IJobCardMaterial {
@@ -69,8 +75,12 @@ export interface IJobCard extends Document {
   size?: string;
   /** One entry per person being stitched for on this order. */
   measurementSets: {
+    /** Stable across saves, so an order line can point at this person. */
+    uid?: string;
     profileId?: string;
     name: string;
+    /** Blank unless asked for — there is no sensible default age. */
+    age?: number | null;
     fabric?: string;
     size?: string;
     qty: number;
@@ -100,6 +110,7 @@ const itemSchema = new Schema<IJobCardItem>(
     qty: { type: Number, default: 0 },
     rate: { type: Number, default: 0 },
     amount: { type: Number, default: 0 },
+    personUid: String,
   },
   { _id: false },
 );
@@ -167,8 +178,10 @@ const jobCardSchema = new Schema<IJobCard>(
       type: [
         new Schema(
           {
+            uid: { type: String },
             profileId: { type: String },
             name: { type: String, required: true, trim: true },
+            age: { type: Number, default: null, min: 0 },
             fabric: { type: String, trim: true },
             size: { type: String, trim: true },
             qty: { type: Number, default: 1, min: 0 },

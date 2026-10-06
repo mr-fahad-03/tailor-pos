@@ -43,9 +43,20 @@ function cleanMeasurementSets(input: JobCardBody['measurementSets']) {
         const str = String(v).trim();
         if (str) values[k] = str;
       }
+      // Left blank by anyone who was not asked; stored as null rather than 0,
+      // which would read as a newborn.
+      const rawAge = (set as { age?: unknown })?.age;
+      const age =
+        rawAge === undefined || rawAge === null || rawAge === ''
+          ? null
+          : Math.max(0, num(rawAge));
       return {
+        // Kept as the client generated it, so the order lines that point at
+        // this person still find them after a round trip.
+        uid: (set as { uid?: string })?.uid || undefined,
         profileId: set?.profileId || undefined,
         name: String(set?.name ?? '').trim(),
+        age,
         fabric: set?.fabric,
         size: set?.size,
         qty: Math.max(0, num(set?.qty, 1)),
@@ -53,10 +64,13 @@ function cleanMeasurementSets(input: JobCardBody['measurementSets']) {
         materials: cleanMaterials((set as { materials?: unknown })?.materials),
       };
     })
-    // a row with no name, no measurements and no materials is an empty slot
+    // a row with nothing typed into it at all is an empty slot
     .filter(
       (set) =>
-        set.name || Object.keys(set.values).length > 0 || set.materials.length > 0,
+        set.name ||
+        set.age !== null ||
+        Object.keys(set.values).length > 0 ||
+        set.materials.length > 0,
     );
 }
 
@@ -95,15 +109,23 @@ interface JobCardBody {
   isNewCustomer?: boolean;
   accountsAc?: string;
   invoiceNo?: string;
-  items?: { code?: string; productName?: string; qty?: number; rate?: number }[];
+  items?: {
+    code?: string;
+    productName?: string;
+    qty?: number;
+    rate?: number;
+    personUid?: string;
+  }[];
   discount?: number;
   taxRate?: number;
   measurements?: Record<string, string>;
   fabric?: string;
   size?: string;
   measurementSets?: {
+    uid?: string;
     profileId?: string;
     name?: string;
+    age?: number | null;
     fabric?: string;
     size?: string;
     qty?: number;
@@ -128,6 +150,7 @@ function buildComputed(body: JobCardBody) {
       qty: num(i.qty),
       rate: num(i.rate),
       amount: lineAmount(num(i.qty), num(i.rate)),
+      personUid: i.personUid || undefined,
     }));
   const totals = jobCardTotals(items, num(body.discount), taxRate, num(body.additionalCharges));
   // Legacy orders kept one shared list; materials now sit on each person.

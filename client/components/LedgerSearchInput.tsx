@@ -20,6 +20,7 @@ export function LedgerSearchInput({
   placeholder = 'Search customers…',
   disabled,
   autoFocus,
+  className = '',
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -27,6 +28,7 @@ export function LedgerSearchInput({
   placeholder?: string;
   disabled?: boolean;
   autoFocus?: boolean;
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<Ledger[]>([]);
@@ -65,9 +67,10 @@ export function LedgerSearchInput({
         autoFocus={autoFocus}
         onChange={(e) => {
           onChange(e.target.value);
-          setOpen(true);
+          // Suggestions follow what is being typed rather than greeting an
+          // empty box with the first eight names on file.
+          setOpen(e.target.value.trim().length > 0);
         }}
-        onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && rows.length > 0) {
             e.preventDefault();
@@ -75,7 +78,7 @@ export function LedgerSearchInput({
             setOpen(false);
           }
         }}
-        className="input"
+        className={`input ${className}`}
       />
       <AnchoredDropdown anchorRef={wrapRef} panelRef={panelRef} open={open && rows.length > 0} width={320}>
         <>

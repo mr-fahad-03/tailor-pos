@@ -110,6 +110,8 @@ export interface JobCardItem {
   qty: number;
   rate: number;
   amount: number;
+  /** The person this line is stitched to, by their measurement set's uid. */
+  personUid?: string;
 }
 
 export interface JobCardMaterial {
@@ -151,8 +153,12 @@ export interface MaterialLine {
 
 /** One person being stitched for on an order. */
 export interface MeasurementSet {
+  /** Stable across saves, so an order line can point at this person. */
+  uid?: string;
   profileId?: string;
   name: string;
+  /** Null unless asked for — there is no sensible default age. */
+  age?: number | null;
   fabric?: string;
   size?: string;
   qty: number;
