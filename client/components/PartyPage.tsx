@@ -3,13 +3,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { fmt } from '@/lib/format';
-import type { Ledger } from '@/lib/types';
-import { Card, EmptyState, Field, TextInput, NumberInput } from '@/components/ui';
-import { Modal } from '@/components/Modal';
+import { formatAddress, type Ledger } from '@/lib/types';
+import { Card, EmptyState, TextInput } from '@/components/ui';
+import {
+  LedgerFormModal,
+  LEDGER_FORM_LABELS,
+  type PartyType,
+} from '@/components/LedgerFormModal';
+
+export type { PartyType };
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/components/AuthContext';
-
-export type PartyType = 'customer' | 'supplier';
 
 /** Which fields each kind of party actually needs on its form. */
 export interface PartyConfig {
@@ -18,17 +22,8 @@ export interface PartyConfig {
   /** Singular, lower case — used inside sentences. */
   noun: string;
   sub: string;
-  /** A TRN and an opening balance only matter for people you trade with. */
-  showTrn: boolean;
-  showOpeningBalance: boolean;
-  nameLabel: string;
   addressLabel: string;
 }
-
-const blank = { name: '', phone: '', address: '', trn: '', openingBalance: '0' };
-
-/** Mirrors the server's cap, so the form stops you before the request does. */
-const NAME_MAX = 120;
 
 /**
  * One screen per party type. Customers and suppliers are both ledgers
@@ -46,9 +41,7 @@ export function PartyPage({ config }: { config: PartyConfig }) {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Ledger | null>(null);
-  const [form, setForm] = useState(blank);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const labels = LEDGER_FORM_LABELS[config.type];
 
   const load = useCallback(
     async (query: string) => {
@@ -73,58 +66,12 @@ export function PartyPage({ config }: { config: PartyConfig }) {
 
   function openNew() {
     setEditing(null);
-    setForm(blank);
-    setError('');
     setOpen(true);
   }
 
   function openEdit(l: Ledger) {
     setEditing(l);
-    setForm({
-      name: l.name,
-      phone: l.phone ?? '',
-      address: l.address ?? '',
-      trn: l.trn ?? '',
-      openingBalance: String(l.openingBalance ?? 0),
-    });
-    setError('');
     setOpen(true);
-  }
-
-  async function save() {
-    if (!form.name.trim()) {
-      setError(`${config.nameLabel} is required`);
-      return;
-    }
-    if (form.name.trim().length > NAME_MAX) {
-      setError(`${config.nameLabel} cannot be longer than ${NAME_MAX} characters`);
-      return;
-    }
-    setSaving(true);
-    setError('');
-    const body = {
-      name: form.name.trim(),
-      phone: form.phone.trim(),
-      address: form.address.trim(),
-      ...(config.showTrn ? { trn: form.trn.trim() } : {}),
-      ...(config.showOpeningBalance ? { openingBalance: Number(form.openingBalance) || 0 } : {}),
-      type: config.type,
-    };
-    try {
-      if (editing) {
-        await api.ledgers.update(editing._id, body);
-        toast(`${form.name.trim()} updated`);
-      } else {
-        await api.ledgers.create(body);
-        toast(`${config.noun} "${form.name.trim()}" added`);
-      }
-      setOpen(false);
-      await load(q);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save');
-    } finally {
-      setSaving(false);
-    }
   }
 
   async function remove(l: Ledger) {
@@ -186,11 +133,13 @@ export function PartyPage({ config }: { config: PartyConfig }) {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-ink-100 bg-ink-50/60">
-                  <th className="th">{config.nameLabel}</th>
-                  <th className="th">Phone</th>
+                  <th className="th">ID</th>
+                  <th className="th">{labels.nameLabel}</th>
+                  <th className="th">Mobile</th>
+                  <th className="th">Email</th>
                   <th className="th">{config.addressLabel}</th>
-                  {config.showTrn && <th className="th">TRN</th>}
-                  {config.showOpeningBalance && <th className="th text-right">Opening</th>}
+                  {labels.showTrn && <th className="th">TRN</th>}
+                  {labels.showOpeningBalance && <th className="th text-right">Opening</th>}
                   {canManage && <th className="th" />}
                 </tr>
               </thead>
@@ -203,19 +152,28 @@ export function PartyPage({ config }: { config: PartyConfig }) {
                         column is pushed off the right-hand edge. The cap goes on
                         an inner block, since max-width on a cell is advisory in
                         auto table layout and browsers may ignore it. */}
+                    <td className="td font-mono text-xs text-ink-500">{l.contactId || '—'}</td>
                     <td className="td whitespace-normal font-bold text-ink-900">
                       <div className="max-w-[22rem] break-words">{l.name}</div>
+                      {l[labels.secondary.key] && (
+                        <div className="max-w-[22rem] break-words text-[11px] font-medium text-ink-500">
+                          {l[labels.secondary.key]}
+                        </div>
+                      )}
                     </td>
                     <td className="td font-mono text-xs">{l.phone || '—'}</td>
-                    <td className="td whitespace-normal">
-                      <div className="max-w-[18rem] break-words">{l.address || '—'}</div>
+                    <td className="td whitespace-normal text-xs">
+                      <div className="max-w-[14rem] break-words">{l.email || '—'}</div>
                     </td>
-                    {config.showTrn && (
+                    <td className="td whitespace-normal">
+                      <div className="max-w-[18rem] break-words">{formatAddress(l) || '—'}</div>
+                    </td>
+                    {labels.showTrn && (
                       <td className="td whitespace-normal font-mono text-xs">
                         <div className="max-w-[12rem] break-words">{l.trn || '—'}</div>
                       </td>
                     )}
-                    {config.showOpeningBalance && (
+                    {labels.showOpeningBalance && (
                       <td className="td text-right font-semibold tabular-nums">
                         {fmt(l.openingBalance)}
                       </td>
@@ -246,73 +204,15 @@ export function PartyPage({ config }: { config: PartyConfig }) {
         )}
       </Card>
 
-      <Modal
+      <LedgerFormModal
         open={open}
         onClose={() => setOpen(false)}
-        title={editing ? `Edit ${config.noun}` : `New ${config.noun}`}
+        onSaved={() => void load(q)}
+        type={config.type}
+        editing={editing}
+        noun={config.noun}
         sub={config.sub}
-        footer={
-          <>
-            <button className="btn-soft" onClick={() => setOpen(false)} disabled={saving}>
-              Cancel
-            </button>
-            <button className="btn-primary" onClick={save} disabled={saving}>
-              {saving ? 'Saving…' : editing ? 'Save changes' : `Add ${config.noun}`}
-            </button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <Field label={config.nameLabel}>
-            <TextInput
-              autoFocus
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder={`${config.nameLabel}…`}
-              maxLength={NAME_MAX}
-            />
-          </Field>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Phone">
-              <TextInput
-                value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                placeholder="05xxxxxxxx"
-                className="font-mono"
-              />
-            </Field>
-            {config.showTrn && (
-              <Field label="TRN">
-                <TextInput
-                  value={form.trn}
-                  onChange={(e) => setForm({ ...form, trn: e.target.value })}
-                  placeholder="Tax registration number"
-                  className="font-mono"
-                />
-              </Field>
-            )}
-          </div>
-          <Field label={config.addressLabel}>
-            <TextInput
-              value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
-            />
-          </Field>
-          {config.showOpeningBalance && (
-            <Field label="Opening Balance (AED)" className="max-w-[12rem]">
-              <NumberInput
-                value={form.openingBalance}
-                onChange={(e) => setForm({ ...form, openingBalance: e.target.value })}
-              />
-            </Field>
-          )}
-          {error && (
-            <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">
-              {error}
-            </p>
-          )}
-        </div>
-      </Modal>
+      />
     </div>
   );
 }

@@ -179,8 +179,13 @@ jobCardRouter.get(
   asyncHandler(async (req, res) => {
     const no = num(req.query.no);
     const dir = req.query.dir === 'next' ? 'next' : 'prev';
+    // `$type: 'number'` keeps drafts out: they carry no order number, and a
+    // missing field compares as null, which sorts below every number — so
+    // without this, stepping back from the lowest order lands on a draft.
     const doc = await JobCard.findOne(
-      dir === 'prev' ? { no: { $lt: no } } : { no: { $gt: no } },
+      dir === 'prev'
+        ? { no: { $type: 'number', $lt: no } }
+        : { no: { $type: 'number', $gt: no } },
     )
       .sort({ no: dir === 'prev' ? -1 : 1 })
       .lean();
@@ -383,10 +388,55 @@ interface PaymentBody {
   discount?: number;
   note?: string;
   taxRate?: number;
+  cardHolder?: string;
+  /** Accepted so a client need not mask it itself; only the last four is kept. */
+  cardNumber?: string;
+  cardLast4?: string;
+  cardExpiry?: string;
+  accountName?: string;
+  iban?: string;
+}
+
+/**
+ * The parts of a card or transfer worth keeping on the payment.
+ *
+ * A card number is reduced to its last four here no matter what arrived, and a
+ * CVC is not a field at all — storing either after a payment is forbidden, and
+ * neither is any use for matching a statement line later.
+ */
+function tenderDetails(p: PaymentBody) {
+  if (p.mode === 'card') {
+    return {
+      cardHolder: p.cardHolder?.trim() || undefined,
+      cardLast4:
+        String(p.cardLast4 ?? p.cardNumber ?? '').replace(/\D/g, '').slice(-4) || undefined,
+      cardExpiry: p.cardExpiry?.trim() || undefined,
+    };
+  }
+  if (p.mode === 'bank') {
+    return {
+      accountName: p.accountName?.trim() || undefined,
+      iban: p.iban?.replace(/\s+/g, '').toUpperCase() || undefined,
+    };
+  }
+  return {};
 }
 
 function applyPayment(doc: {
-  payments: { date: Date; mode: string; amount: number; bank?: string; reference?: string; discount: number; note?: string }[];
+  payments: {
+    date: Date;
+    mode: string;
+    amount: number;
+    bank?: string;
+    reference?: string;
+    discount: number;
+    note?: string;
+    cardHolder?: string;
+    cardLast4?: string;
+    cardExpiry?: string;
+    accountName?: string;
+    iban?: string;
+  }[];
   advance: number;
   advanceBeforeTax: number;
   advanceTax: number;
@@ -404,6 +454,7 @@ function applyPayment(doc: {
     reference: p.reference,
     discount: r2(num(p.discount)),
     note: p.note,
+    ...tenderDetails(p),
   });
   const advSplit = advanceSplit(
     r2(doc.advance + amount),

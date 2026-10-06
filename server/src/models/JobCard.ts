@@ -19,10 +19,22 @@ export interface IJobCardPayment {
   date: Date;
   mode: 'cash' | 'bank' | 'card' | 'credit';
   amount: number;
+  /** The bank a transfer came from. */
   bank?: string;
+  /** Transfer reference, or the card terminal's approval number. */
   reference?: string;
   discount: number;
   note?: string;
+  /**
+   * Card tenders only. The last four digits are kept so a payment can be
+   * matched to a statement line; the full number and the CVC never are.
+   */
+  cardHolder?: string;
+  cardLast4?: string;
+  cardExpiry?: string;
+  /** Bank tenders only. */
+  accountName?: string;
+  iban?: string;
 }
 
 /** 'draft' is an order abandoned part-finished — it is not real work yet. */
@@ -114,6 +126,11 @@ const paymentSchema = new Schema<IJobCardPayment>(
     reference: String,
     discount: { type: Number, default: 0 },
     note: String,
+    cardHolder: String,
+    cardLast4: String,
+    cardExpiry: String,
+    accountName: String,
+    iban: String,
   },
   { _id: false },
 );

@@ -10,6 +10,19 @@ const DEFAULTS: AppSettings = {
   bookNo: 270,
   salesman: 'GENERAL',
   deliveryDays: 7,
+  // Left blank on purpose: an invoice must carry the shop's own details, and
+  // a plausible-looking placeholder is worse than an obviously empty line.
+  company: { name: '', address: '', phone: '', email: '', website: '', trn: '' },
+  bank: {
+    name: '',
+    accountType: '',
+    accountName: '',
+    accountNo: '',
+    iban: '',
+    swift: '',
+    chequeFavour: '',
+    note: '',
+  },
 };
 
 const SettingsCtx = createContext<{
@@ -25,7 +38,18 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) setSettings({ ...DEFAULTS, ...JSON.parse(raw) });
+      // Merged a level down: a settings object saved before the company and
+      // bank blocks existed, or one holding only some of their fields, must
+      // still come back whole rather than with holes in it.
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<AppSettings>;
+        setSettings({
+          ...DEFAULTS,
+          ...saved,
+          company: { ...DEFAULTS.company, ...(saved.company ?? {}) },
+          bank: { ...DEFAULTS.bank, ...(saved.bank ?? {}) },
+        });
+      }
     } catch {
       /* ignore */
     }

@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { Ledger } from '@/lib/types';
+import { LedgerFormModal } from '@/components/LedgerFormModal';
 import { Modal } from './Modal';
-import { Field, Select, TextInput } from './ui';
+import { TextInput } from './ui';
 import { useToast } from './Toast';
 import { useAuth } from './AuthContext';
 
@@ -37,21 +38,17 @@ export function LedgerSearchModal({
   // The counter often meets a customer who is not on file yet, so a new one
   // can be created here without abandoning the order.
   const [creating, setCreating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [form, setForm] = useState<{ name: string; phone: string; type: LedgerType }>({
-    name: '',
-    phone: '',
-    type: 'customer',
-  });
+  /** Which kind of party the create form is opened for, and with what name. */
+  const [createType, setCreateType] = useState<LedgerType>('customer');
+  const [seed, setSeed] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setQ('');
     setPicked(null);
-    setError('');
     if (startIn === 'newCustomer') {
-      setForm({ name: seedName.trim(), phone: '', type: 'customer' });
+      setCreateType('customer');
+      setSeed(seedName.trim());
       setCreating(true);
       return;
     }
@@ -81,117 +78,65 @@ export function LedgerSearchModal({
 
   function startCreate(type: LedgerType) {
     // Carry whatever was typed in the search box into the name.
-    setForm({ name: q.trim(), phone: '', type });
-    setError('');
+    setCreateType(type);
+    setSeed(q.trim());
     setCreating(true);
   }
 
-  async function saveNew() {
-    if (!form.name.trim()) {
-      setError('Name is required');
-      return;
-    }
-    setSaving(true);
-    setError('');
-    try {
-      const created = await api.ledgers.create({
-        name: form.name.trim(),
-        phone: form.phone.trim(),
-        type: form.type,
-      });
-      toast(`${form.type === 'supplier' ? 'Supplier' : 'Customer'} "${created.name}" added`);
-      // Straight onto the order — that is why they opened this.
-      onSelect(created);
-      onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save');
-    } finally {
-      setSaving(false);
-    }
+  // Creating is the shared ledger form, not a thinner copy of it: someone
+  // added mid-order is a full record like any other. It replaces this dialog
+  // while it is up, so the two are never stacked on top of each other.
+  if (creating) {
+    return (
+      <LedgerFormModal
+        open={open}
+        onClose={onClose}
+        onSaved={(l) => {
+          // Straight onto the order — that is why they opened this.
+          onSelect(l);
+          onClose();
+        }}
+        type={createType}
+        seedName={seed}
+        sub="Saved to your ledgers and added to this order"
+        footerExtra={
+          startIn === 'newCustomer' ? undefined : (
+            <button className="btn-soft" onClick={() => setCreating(false)}>
+              Back to search
+            </button>
+          )
+        }
+      />
+    );
   }
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={creating ? `New ${form.type === 'supplier' ? 'supplier' : 'customer'}` : 'Find Ledger'}
-      sub={
-        creating
-          ? 'Saved to your ledgers and added to this order'
-          : 'Search by name or phone, then press OK'
-      }
-      wide={!creating}
+      title="Find Ledger"
+      sub="Search by name or phone, then press OK"
+      wide
       footer={
-        creating ? (
-          <>
-            <button className="btn-soft" onClick={() => setCreating(false)} disabled={saving}>
-              Back to search
-            </button>
-            <button className="btn-primary" onClick={saveNew} disabled={saving}>
-              {saving ? 'Saving…' : 'Save & use'}
-            </button>
-          </>
-        ) : (
-          <>
-            <button className="btn-soft" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              className="btn-success"
-              disabled={!picked}
-              onClick={() => {
-                if (picked) {
-                  onSelect(picked);
-                  onClose();
-                }
-              }}
-            >
-              OK
-            </button>
-          </>
-        )
+        <>
+          <button className="btn-soft" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn-success"
+            disabled={!picked}
+            onClick={() => {
+              if (picked) {
+                onSelect(picked);
+                onClose();
+              }
+            }}
+          >
+            OK
+          </button>
+        </>
       }
     >
-      {creating ? (
-        <div className="space-y-4">
-          <Field label="Name">
-            <TextInput
-              autoFocus
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Customer or company name"
-            />
-          </Field>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Phone">
-              <TextInput
-                value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                placeholder="05xxxxxxxx"
-              />
-            </Field>
-            <Field label="Type">
-              <Select
-                value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value as LedgerType })}
-              >
-                <option value="customer">Customer</option>
-                <option value="supplier">Supplier</option>
-                <option value="general">General</option>
-              </Select>
-            </Field>
-          </div>
-          {error && (
-            <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">
-              {error}
-            </p>
-          )}
-          <p className="text-xs leading-relaxed text-ink-500">
-            Full details (address, TRN, opening balance) can be filled in later from the
-            Ledgers screen.
-          </p>
-        </div>
-      ) : (
         <>
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <TextInput
@@ -272,7 +217,6 @@ export function LedgerSearchModal({
             </div>
           </div>
         </>
-      )}
     </Modal>
   );
 }

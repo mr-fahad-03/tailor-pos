@@ -7,9 +7,6 @@ const CONFIG: PartyConfig = {
   title: 'Suppliers',
   noun: 'supplier',
   sub: 'Where fabric, trims and materials are bought from',
-  showTrn: true,
-  showOpeningBalance: true,
-  nameLabel: 'Supplier Name',
   addressLabel: 'Address',
 };
 

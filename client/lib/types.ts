@@ -1,11 +1,72 @@
 export interface Ledger {
   _id: string;
   name: string;
+  /** The mobile number. Named `phone` because older records are. */
   phone?: string;
+  altPhone?: string;
+  landline?: string;
+  contactId?: string;
+  customerGroup?: string;
+  businessName?: string;
+  /** The person dealt with at a company — a supplier's salesman. */
+  contactPerson?: string;
+  invoiceOnCompanyName?: boolean;
+  email?: string;
+  /** Null when cleared — an emptied date has to be written, not skipped. */
+  dob?: string | null;
+  assignedTo?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  zip?: string;
+  /** Free-text address from before the fields above existed. */
   address?: string;
   trn?: string;
   openingBalance: number;
+  payTerm?: number | null;
+  payTermUnit?: 'days' | 'months';
+  /** Null or absent means no limit, which is not a limit of zero. */
+  creditLimit?: number | null;
   type: 'customer' | 'supplier' | 'general';
+  savedCards?: SavedCard[];
+  savedBanks?: SavedBank[];
+}
+
+/** An address as it should read on a document, from the parts that are set. */
+export const formatAddress = (l?: Partial<Ledger> | null): string => {
+  if (!l) return '';
+  const parts = [l.addressLine1, l.addressLine2, l.city, l.state, l.zip, l.country]
+    .map((p) => (p ?? '').trim())
+    .filter(Boolean);
+  // Nothing structured set yet: fall back to whatever the old single box held.
+  return parts.length ? parts.join(', ') : (l.address ?? '').trim();
+};
+
+/**
+ * A card kept on file against a customer, so a regular does not have to read
+ * their details out again.
+ *
+ * Only the parts that are safe to keep are here. The full card number is never
+ * stored — just the last four, which is all anyone needs to recognise the card
+ * — and the CVC is never stored at all. Keeping either is forbidden once a
+ * payment has been taken, and neither is any use to us afterwards.
+ */
+export interface SavedCard {
+  _id?: string;
+  holder?: string;
+  last4?: string;
+  /** MM/YY, as printed on the card. */
+  expiry?: string;
+}
+
+/** A bank account kept on file against a customer, for transfers. */
+export interface SavedBank {
+  _id?: string;
+  bankName?: string;
+  accountName?: string;
+  iban?: string;
 }
 
 /** Where a product may be used: a charged line, a consumed material, or both. */
@@ -57,10 +118,19 @@ export interface JobCardPayment {
   date: string;
   mode: PaymentMode;
   amount: number;
+  /** The bank a transfer came from. */
   bank?: string;
+  /** Transfer reference, or the card terminal's approval number. */
   reference?: string;
   discount: number;
   note?: string;
+  /** Card tenders only — see SavedCard on what is and is not kept. */
+  cardHolder?: string;
+  cardLast4?: string;
+  cardExpiry?: string;
+  /** Bank tenders only. */
+  accountName?: string;
+  iban?: string;
 }
 
 /** A length of cloth or trim consumed by one person's garment. */
@@ -243,11 +313,49 @@ export interface FlatPayment {
   discount: number;
 }
 
+/**
+ * What a party still owes across everything: their opening balance, their
+ * unpaid stitching orders and their unpaid bills. Negative means they are in
+ * credit — they have paid ahead.
+ */
+export interface LedgerDue {
+  ledgerId: string;
+  openingBalance: number;
+  orderDue: number;
+  saleDue: number;
+  openOrders: number;
+  due: number;
+}
+
+/** Printed at the head of every invoice. Blank lines simply do not print. */
+export interface CompanyDetails {
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  website: string;
+  trn: string;
+}
+
+/** Printed at the foot of every invoice, so a customer can transfer. */
+export interface BankDetails {
+  name: string;
+  accountType: string;
+  accountName: string;
+  accountNo: string;
+  iban: string;
+  swift: string;
+  chequeFavour: string;
+  note: string;
+}
+
 export interface AppSettings {
   taxRate: number;
   bookNo: number;
   salesman: string;
   deliveryDays: number;
+  company: CompanyDetails;
+  bank: BankDetails;
 }
 
 export const MEASURE_FIELDS = [

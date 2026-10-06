@@ -6,6 +6,7 @@ import type {
   FlatPayment,
   JobCard,
   Ledger,
+  LedgerDue,
   MeasurementProfile,
   Page,
   PermissionCatalog,
@@ -13,6 +14,8 @@ import type {
   ProductUsagePicker,
   Role,
   Sale,
+  SavedBank,
+  SavedCard,
 } from './types';
 
 /**
@@ -150,9 +153,18 @@ export const api = {
       get<Page<Ledger>>(
         `/ledgers?q=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}&page=${page}&limit=${limit}`,
       ),
+    get: (id: string) => get<Ledger>(`/ledgers/${id}`),
+    due: (id: string) => get<LedgerDue>(`/ledgers/${id}/due`),
     create: (body: Partial<Ledger>) => post<Ledger>('/ledgers', body),
     update: (id: string, body: Partial<Ledger>) => put<Ledger>(`/ledgers/${id}`, body),
     remove: (id: string) => del<{ ok: boolean }>(`/ledgers/${id}`),
+    /**
+     * Remember how this customer paid. Separate from `update` because taking a
+     * payment is not the same permission as editing the customer record, and a
+     * cashier must be able to do the first without the second.
+     */
+    savePaymentDetails: (id: string, body: { card?: SavedCard; bank?: SavedBank }) =>
+      post<Ledger>(`/ledgers/${id}/payment-details`, body),
   },
 
   products: {

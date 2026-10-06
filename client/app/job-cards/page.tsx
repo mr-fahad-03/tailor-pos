@@ -187,7 +187,7 @@ function JobCardsInner() {
                   <th className="th text-right">Advance</th>
                   <th className="th text-right">Balance</th>
                   <th className="th">Status</th>
-                  {canConvert && <th className="th" />}
+                  <th className="th text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-50">
@@ -221,9 +221,22 @@ function JobCardsInner() {
                     <td className="td">
                       <StatusBadge status={j.status} />
                     </td>
-                    {canConvert && (
-                      <td className="td text-right">
-                        {j.status === 'open' && (
+                    <td className="td text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {/* Printing is the common errand from this list, so it
+                            is one press from here rather than a trip through
+                            the order. A draft has no number yet and nothing
+                            worth billing, so it gets no invoice. */}
+                        {j.status !== 'draft' && (
+                          <Link
+                            href={`/job-cards/${j._id}/invoice?print=1`}
+                            className="btn-soft !py-1 !px-2.5 text-[11px]"
+                            title={`Print the invoice for order ${orderNo(j)}`}
+                          >
+                            🖨 Invoice
+                          </Link>
+                        )}
+                        {canConvert && j.status === 'open' && (
                           <button
                             className="btn-success !py-1 !px-2.5 text-[11px]"
                             onClick={() => void convert([j._id])}
@@ -233,8 +246,8 @@ function JobCardsInner() {
                             Convert →
                           </button>
                         )}
-                      </td>
-                    )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

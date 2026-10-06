@@ -9,7 +9,10 @@ import {
   type JobCard,
   type JobCardPayment,
   type Ledger,
+  type LedgerDue,
   type Product,
+  type SavedBank,
+  type SavedCard,
 } from '@/lib/types';
 import { useSettings } from './SettingsContext';
 import { useToast } from './Toast';
@@ -21,13 +24,20 @@ import {
   DateInput,
   Field,
   NumberInput,
-  Seg,
   StatusBadge,
   TextInput,
 } from './ui';
 import { Modal } from './Modal';
 import { LedgerSearchModal } from './LedgerSearchModal';
-import { PaymentDialog, type PaymentPayload } from './PaymentDialog';
+import {
+  SplitTender,
+  emptySplit,
+  emptyDetails,
+  last4,
+  type Split,
+  type TenderDetails,
+  type TenderMode,
+} from './SplitTender';
 import { ProductSearchInput } from './ProductSearchInput';
 import { Icon } from '@/components/icons';
 
@@ -149,6 +159,17 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   const [bank, setBank] = useState(initial?.bank ?? '');
   const [creditCardNo, setCreditCardNo] = useState(initial?.creditCardNo ?? '');
   const [payments, setPayments] = useState<JobCardPayment[]>(initial?.payments ?? []);
+  // What is being handed over right now, before it is recorded. Held apart
+  // from `payments`, which is only ever what the server has already booked.
+  const [split, setSplit] = useState<Split>(emptySplit);
+  const [tenderDetails, setTenderDetails] = useState<TenderDetails>(emptyDetails);
+  const [payingSplit, setPayingSplit] = useState(false);
+  // What this customer has paid with before, offered instead of retyped.
+  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
+  const [savedBanks, setSavedBanks] = useState<SavedBank[]>([]);
+  // What they owe from before this order, shown under their name.
+  const [due, setDue] = useState<LedgerDue | null>(null);
+  const [neighbours, setNeighbours] = useState({ prev: false, next: false });
   const [status, setStatus] = useState(initial?.status ?? 'open');
 
   // ---- ui ----
@@ -157,8 +178,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   const settled = useRef(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [ledgerMode, setLedgerMode] = useState<'search' | 'newCustomer'>('search');
-  const [payOpen, setPayOpen] = useState(false);
-  const [convertOpen, setConvertOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [findQ, setFindQ] = useState('');
@@ -172,7 +191,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   const canSave = mode === 'new' ? can('jobcards.create') : can('jobcards.edit');
   const canPay = can('jobcards.payment');
   const canClose = can('jobcards.close');
-  const canConvert = can('jobcards.convert');
   const canAddLedger = can('ledgers.manage');
 
   // New mode: fetch next number
@@ -210,7 +228,13 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     const advanceTax = r2(advance - advanceBeforeTax);
     const balance = r2(netAmount - advance);
     const materialTotal = r2(sets.reduce((s, p) => s + materialsTotal(p.materials), 0));
-    return { rows, total, additionalCharges: extra, discount: d, tax, netAmount, advance, advanceBeforeTax, advanceTax, balance, materialTotal };
+    // What the counter reads out: how many lines were charged and how many
+    // pieces that came to. Blank rows are still in `items` as placeholders, so
+    // only rows that actually carry a product are counted.
+    const charged = rows.filter((r) => r.productName?.trim() || r.amount > 0);
+    const itemCount = charged.length;
+    const qtyCount = r2(charged.reduce((s, r) => s + r.qty, 0));
+    return { rows, total, additionalCharges: extra, discount: d, tax, netAmount, advance, advanceBeforeTax, advanceTax, balance, materialTotal, itemCount, qtyCount };
   }, [items, discount, additionalCharges, payments, sets, taxRate]);
 
   function loadDoc(d: JobCard) {
@@ -422,13 +446,70 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
-  function resetNew() {
-    if (mode === 'new') {
-      window.location.reload();
-    } else {
-      router.push('/job-cards/new');
+  /**
+   * What this customer has paid with before. Fetched when the customer
+   * changes rather than on every render, and cleared for a walk-in, so the
+   * card pad never offers someone else's card.
+   */
+  useEffect(() => {
+    if (!ledgerId) {
+      setSavedCards([]);
+      setSavedBanks([]);
+      setDue(null);
+      return;
     }
-  }
+    let live = true;
+    void (async () => {
+      try {
+        const l = await api.ledgers.get(ledgerId);
+        if (!live) return;
+        setSavedCards(l.savedCards ?? []);
+        setSavedBanks(l.savedBanks ?? []);
+      } catch {
+        if (live) {
+          setSavedCards([]);
+          setSavedBanks([]);
+        }
+      }
+      try {
+        const d = await api.ledgers.due(ledgerId);
+        if (live) setDue(d);
+      } catch {
+        // Not worth a toast: the order can be written without knowing.
+        if (live) setDue(null);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [ledgerId]);
+
+  /**
+   * Whether an order exists either side of this one, so the buttons can say
+   * so rather than letting someone press a dead end and get a toast. Asked of
+   * the same endpoint the buttons use, so the answer cannot disagree with it.
+   */
+  useEffect(() => {
+    if (mode !== 'edit' || no == null) {
+      setNeighbours({ prev: false, next: false });
+      return;
+    }
+    let live = true;
+    void (async () => {
+      const [prev, next] = await Promise.all(
+        (['prev', 'next'] as const).map((dir) =>
+          api.jobCards.adjacent(no, dir).then(
+            () => true,
+            () => false,
+          ),
+        ),
+      );
+      if (live) setNeighbours({ prev, next });
+    })();
+    return () => {
+      live = false;
+    };
+  }, [mode, no]);
 
   async function navigate(dir: 'prev' | 'next') {
     if (no == null) return;
@@ -462,32 +543,107 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     }
   }
 
-  async function confirmPayment(p: PaymentPayload) {
+  /**
+   * Record the split as one payment per tender used.
+   *
+   * Each goes through the same endpoint a part payment uses, so nothing about
+   * how a payment is booked changes — only how many are sent. Anything handed
+   * over above the balance is change, so only the balance is ever recorded.
+   */
+  async function paySplit() {
     if (!docId) return;
+    const due = Math.max(calc.balance, 0);
+    const entries = (['cash', 'card', 'bank'] as TenderMode[])
+      .map((mode) => ({ mode, amount: num(split[mode]) }))
+      .filter((e) => e.amount > 0);
+    if (!entries.length) return;
+
+    // Trim the last tender back so the booked total never exceeds the balance.
+    let left = due;
+    const booked: { mode: TenderMode; amount: number }[] = [];
+    for (const e of entries) {
+      const take = Math.round(Math.min(e.amount, left) * 100) / 100;
+      if (take > 0) booked.push({ mode: e.mode, amount: take });
+      left = Math.round((left - take) * 100) / 100;
+      if (left <= 0) break;
+    }
+    if (!booked.length) {
+      toast('Nothing left to pay on this order', 'info');
+      return;
+    }
+
+    setPayingSplit(true);
     try {
-      const d = await api.jobCards.addPayment(docId, p);
-      loadDoc(d);
-      toast(`Payment of ${fmt(p.amount)} AED recorded`);
+      const card = tenderDetails.card;
+      const bankT = tenderDetails.bank;
+      let latest: JobCard | null = null;
+      for (const b of booked) {
+        latest = await api.jobCards.addPayment(docId, {
+          mode: b.mode,
+          amount: b.amount,
+          discount: 0,
+          // The card number itself is deliberately not sent: the server keeps
+          // the last four and nothing else, so there is no reason to put the
+          // whole number on the wire. The CVC never leaves this component.
+          ...(b.mode === 'card'
+            ? {
+                cardHolder: card.holder,
+                cardLast4: last4(card.number),
+                cardExpiry: card.expiry,
+              }
+            : {}),
+          ...(b.mode === 'bank'
+            ? {
+                bank: bankT.bankName,
+                accountName: bankT.accountName,
+                iban: bankT.iban,
+                reference: bankT.reference,
+              }
+            : {}),
+        });
+      }
+      if (latest) loadDoc(latest);
+
+      // Remember the details against the customer, so the next order offers
+      // them instead of asking again. A failure here must not look like a
+      // failed payment — the money is already booked.
+      const usedCard = booked.some((b) => b.mode === 'card');
+      const usedBank = booked.some((b) => b.mode === 'bank');
+      if (ledgerId && (usedCard || usedBank)) {
+        try {
+          const saved = await api.ledgers.savePaymentDetails(ledgerId, {
+            ...(usedCard
+              ? { card: { holder: card.holder, last4: last4(card.number), expiry: card.expiry } }
+              : {}),
+            ...(usedBank
+              ? {
+                  bank: {
+                    bankName: bankT.bankName,
+                    accountName: bankT.accountName,
+                    iban: bankT.iban,
+                  },
+                }
+              : {}),
+          });
+          setSavedCards(saved.savedCards ?? []);
+          setSavedBanks(saved.savedBanks ?? []);
+        } catch {
+          // Nothing to tell the counter: the payment went through either way.
+        }
+      }
+
+      setSplit(emptySplit());
+      setTenderDetails(emptyDetails());
+      const total = booked.reduce((t, b) => t + b.amount, 0);
+      toast(`Payment of ${fmt(total)} AED recorded`);
+      // Taking the money is the moment the invoice is wanted, so the pad hands
+      // straight over to it with the print dialog already opening. The payment
+      // is saved before this runs, so a cancelled print changes nothing.
+      router.push(`/job-cards/${docId}/invoice?print=1`);
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Payment failed', 'error');
-      throw e;
-    }
-  }
-
-  async function confirmConvert(p: PaymentPayload) {
-    if (!docId) return;
-    try {
-      const hasPayment = num(p.amount) > 0 || num(p.discount) > 0;
-      const { sale } = await api.jobCards.convert(docId, {
-        payment: hasPayment ? p : undefined,
-        salesman: settings.salesman,
-        taxRate,
-      });
-      toast(`Converted to bill B-${sale.billNo}`);
-      router.push(`/sales/${sale._id}`);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : 'Convert failed', 'error');
-      throw e;
+    } finally {
+      setPayingSplit(false);
     }
   }
 
@@ -573,36 +729,45 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
   return (
     <div>
-      {/* header */}
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      {/* header — the title sits left while the navigation is centred on the
+          page. Equal 1fr columns either side of an auto one is what centres
+          it; `justify-between` would only centre it between the title and the
+          right-hand edge. Saving lives in the payment panel beside the figures
+          it commits, so nothing else belongs up here. */}
+      <div className="mb-5 grid grid-cols-1 items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
         <div>
-          <h1 className="page-title">{mode === 'new' ? 'New Order' : 'Edit Order'}</h1>
+          <h1 className="page-title">New Order</h1>
           <p className="page-sub">
             {mode === 'new' ? 'Create a new tailoring order' : `Editing order ${no ?? ''}`}
           </p>
         </div>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <StatusBadge status={status} />
-          <button className="btn-soft" onClick={resetNew} title="Start a new entry">New</button>
-          {canSave && (
-            <button className="btn-primary" onClick={save} disabled={saving || readOnly}>
-              {saving ? 'Saving…' : mode === 'new' || status === 'draft' ? 'Save to Orders' : 'Update Order'}
+        {mode === 'edit' && (
+          <div className="flex items-center justify-center gap-3">
+            <button
+              className="btn-soft"
+              onClick={() => navigate('prev')}
+              disabled={!neighbours.prev}
+              title={neighbours.prev ? 'Go to the previous order' : 'This is the first order'}
+            >
+              ‹‹ Previous Order
             </button>
-          )}
-          {mode === 'edit' && (
-            <>
-              <button className="btn-soft" onClick={() => navigate('prev')} title="Previous record">‹‹</button>
-              <button className="btn-soft" onClick={() => navigate('next')} title="Next record">››</button>
-            </>
-          )}
-        </div>
+            <button
+              className="btn-soft"
+              onClick={() => navigate('next')}
+              disabled={!neighbours.next}
+              title={neighbours.next ? 'Go to the next order' : 'This is the last order'}
+            >
+              Next Order ››
+            </button>
+          </div>
+        )}
       </div>
 
       {status === 'draft' && (
         <div className="mb-5 rounded-2xl border border-brass-200 bg-brass-50 px-5 py-3 text-sm font-semibold text-brass-800">
           This is a draft — it was saved automatically when the form was left part-finished.
-          Fill in what is missing and press <strong>Save to Orders</strong> to make it a real
-          order. It cannot be converted to a sale until then.
+          Fill in what is missing and press <strong>Save / Update Order</strong> to make it a
+          real order. It cannot be converted to a sale until then.
         </div>
       )}
 
@@ -618,44 +783,78 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
           <Card className="p-5">
             {/* One 12-column grid whose spans fill exactly two rows, in the
                 order the counter works: who the order is for, then what it is
-                numbered. The "New customer" slot is always rendered, empty if
-                the user may not add ledgers, so the spans never reshuffle. */}
+                numbered. The two customer buttons share one slot, which is
+                always rendered — empty if the user may not add ledgers — so
+                the spans never reshuffle. */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-12">
               <Field label="Party A/c (Customer)" className="col-span-2 sm:col-span-5">
-                <div className="flex gap-2">
-                  <TextInput
-                    value={partyName}
-                    onChange={(e) => { setPartyName(e.target.value); setLedgerId(''); }}
-                    disabled={readOnly}
-                    placeholder="Select from ledger…"
-                    className="font-semibold"
-                  />
-                  <button className="btn-soft shrink-0" onClick={() => { setLedgerMode('search'); setLedgerOpen(true); }} disabled={readOnly} title="Find ledger (F2)" aria-label="Find ledger">
-                    <Icon name="search" className="h-[17px] w-[17px]" />
-                  </button>
-                </div>
-              </Field>
-              <Field label="Phone" className="sm:col-span-2">
-                <TextInput value={phone} onChange={(e) => setPhone(e.target.value)} disabled={readOnly} className="font-mono" />
-              </Field>
-              <Field label="&nbsp;" className="sm:col-span-3">
-                {canAddLedger && (
-                  <button
-                    className="btn-soft w-full whitespace-nowrap"
-                    onClick={() => { setLedgerMode('newCustomer'); setLedgerOpen(true); }}
-                    disabled={readOnly}
-                    title="Add a customer to the ledger and put them on this order"
+                <TextInput
+                  value={partyName}
+                  onChange={(e) => { setPartyName(e.target.value); setLedgerId(''); }}
+                  disabled={readOnly}
+                  placeholder="Select from ledger…"
+                  className="font-semibold"
+                />
+                {/* What they owed before this order was written, so whoever is
+                    at the counter knows to ask for it. It covers their opening
+                    balance, unpaid orders and unpaid bills — this order is not
+                    in it until it is saved. A negative figure is credit. */}
+                {due && due.due !== 0 && (
+                  <p
+                    className={`mt-1 text-[11px] font-bold ${
+                      due.due > 0 ? 'text-rose-600' : 'text-brand-700'
+                    }`}
+                    title={
+                      due.due > 0
+                        ? `Opening ${fmt(due.openingBalance)} + unpaid orders ${fmt(due.orderDue)} + unpaid bills ${fmt(due.saleDue)}`
+                        : 'This customer has paid ahead'
+                    }
                   >
-                    ＋ New customer
-                  </button>
+                    {due.due > 0
+                      ? `Due Balance: ${fmt(due.due)} AED`
+                      : `In credit: ${fmt(Math.abs(due.due))} AED`}
+                  </p>
                 )}
               </Field>
-              <Field label={no == null && draftNo != null ? 'Draft No' : 'Invoice No'} className="sm:col-span-2">
-                <TextInput
-                  value={no ?? (draftNo != null ? `DRAFT-${draftNo}` : '…')}
-                  readOnly
-                  className="bg-ink-50 font-bold text-brand-700"
-                />
+              <Field label="Phone" className="sm:col-span-3">
+                <TextInput value={phone} onChange={(e) => setPhone(e.target.value)} disabled={readOnly} className="font-mono" />
+              </Field>
+              {/* Find an existing customer, or add one. Both act on the same
+                  field, so they sit together rather than either one being
+                  spelled out in a button wide enough to say so. */}
+              <Field label="&nbsp;" className="sm:col-span-2">
+                <div className="flex gap-2">
+                  <button
+                    className="btn-soft shrink-0"
+                    onClick={() => { setLedgerMode('search'); setLedgerOpen(true); }}
+                    disabled={readOnly}
+                    title="Find ledger (F2)"
+                    aria-label="Find ledger"
+                  >
+                    <Icon name="search" className="h-[17px] w-[17px]" />
+                  </button>
+                  {canAddLedger && (
+                    <button
+                      className="btn-soft shrink-0"
+                      onClick={() => { setLedgerMode('newCustomer'); setLedgerOpen(true); }}
+                      disabled={readOnly}
+                      title="Add a customer to the ledger and put them on this order"
+                      aria-label="New customer"
+                    >
+                      <Icon name="plus" className="h-[17px] w-[17px]" />
+                    </button>
+                  )}
+                </div>
+              </Field>
+              {/* Read-only, so it is set rather than boxed like something to
+                  type into — and big, because it is what the order is called. */}
+              <Field
+                label={no == null && draftNo != null ? 'Draft No' : 'Invoice No'}
+                className="sm:col-span-2 text-right"
+              >
+                <p className="truncate text-2xl font-black leading-[38px] tabular-nums text-ink-900">
+                  {no ?? (draftNo != null ? `DRAFT-${draftNo}` : '…')}
+                </p>
               </Field>
               <Field label="Book No" className="sm:col-span-2">
                 {/* An identifier, not a figure: it reads left like Invoice No and
@@ -781,13 +980,17 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         {/* right payment panel */}
         <div>
           <Card className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto p-5">
-            {/* what the order comes to — the figures the payment below settles */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium text-ink-500">Total</span>
-                <span className="font-bold tabular-nums">{fmt(calc.total)}</span>
+            {/* The chain the counter reads out, in the order the money is
+                actually worked out: what the goods come to, what is added or
+                taken off, the tax on the result, then the one figure the
+                customer hands over. Each row follows from the ones above it,
+                so the two that are typed into sit where they take effect. */}
+            <div className="space-y-2 text-[13px]">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-ink-500">Total without Tax</span>
+                <span className="font-bold tabular-nums">{fmt(calc.total)} AED</span>
               </div>
-              <div className="flex items-center justify-between gap-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
                 <span className="font-medium text-ink-500">Additional Charges</span>
                 <NumberInput
                   value={additionalCharges}
@@ -796,72 +999,87 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   className="input-sm !w-32"
                 />
               </div>
-              <div className="flex items-center justify-between gap-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
                 <span className="font-medium text-ink-500">Discount</span>
-                <NumberInput value={discount} onChange={(e) => setDiscount(e.target.value)} disabled={readOnly} className="input-sm !w-32" />
+                <NumberInput
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value)}
+                  disabled={readOnly}
+                  className="input-sm !w-32"
+                />
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium text-ink-500">Tax ({fmt(taxRate)}%)</span>
-                <span className="font-bold tabular-nums">{fmt(calc.tax)}</span>
+              <div className="flex items-center justify-between border-t border-ink-100 pt-2">
+                <span className="font-medium text-ink-500">Tax ({taxRate}% VAT)</span>
+                <span className="font-bold tabular-nums">+ {fmt(calc.tax)} AED</span>
               </div>
-              <div className="flex items-center justify-between rounded-xl bg-brand-700 px-4 py-2.5 text-white">
-                <span className="text-sm font-bold">Net Amt</span>
-                <span className="text-lg font-black tabular-nums">{fmt(calc.netAmount)}</span>
-              </div>
+            </div>
+
+            {/* The count rides on the bar rather than taking a row of its own,
+                so the figures above read as one unbroken sum. */}
+            <div className="mt-3 rounded-xl bg-brand-700 px-4 py-3 text-center text-white">
+              <p className="text-2xl font-black tabular-nums leading-none">
+                {fmt(calc.netAmount)}
+              </p>
+              <p className="mt-1 text-[11px] font-bold uppercase tracking-widest text-white/75">
+                Total Payable
+              </p>
+              <p className="mt-1 text-[11px] font-medium text-white/60">
+                Items: {calc.itemCount} · Quantity: {fmt(calc.qtyCount)}
+              </p>
             </div>
 
             <h2 className="mb-4 mt-5 border-t border-ink-100 pt-5 text-base font-extrabold tracking-tight text-ink-900">
               Payment
             </h2>
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between rounded-xl bg-ink-50 px-4 py-2.5">
-                <span className="label !mb-0">Advance</span>
-                <span className="text-sm font-extrabold tabular-nums">{fmt(calc.advance)}</span>
+
+            {/* Anything already taken, so the pad below only ever counts what
+                is being handed over now. */}
+            {calc.advance > 0 && (
+              <div className="mb-4 space-y-2.5">
+                <div className="flex items-center justify-between rounded-xl bg-ink-50 px-4 py-2.5">
+                  <span className="label !mb-0">Already Paid</span>
+                  <span className="text-sm font-extrabold tabular-nums">{fmt(calc.advance)}</span>
+                </div>
+                <div className="flex items-center justify-between px-1 text-sm">
+                  <span className="text-ink-500">Advance Before Tax</span>
+                  <span className="font-semibold tabular-nums">{fmt(calc.advanceBeforeTax)}</span>
+                </div>
+                <div className="flex items-center justify-between px-1 text-sm">
+                  <span className="text-ink-500">Advance Tax</span>
+                  <span className="font-semibold tabular-nums">{fmt(calc.advanceTax)}</span>
+                </div>
               </div>
-              <div className="flex items-center justify-between px-1 text-sm">
-                <span className="text-ink-500">Advance Before Tax</span>
-                <span className="font-semibold tabular-nums">{fmt(calc.advanceBeforeTax)}</span>
-              </div>
-              <div className="flex items-center justify-between px-1 text-sm">
-                <span className="text-ink-500">Advance Tax</span>
-                <span className="font-semibold tabular-nums">{fmt(calc.advanceTax)}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl bg-brand-700 px-4 py-3 text-white">
-                <span className="text-sm font-bold">BALANCE</span>
-                <span className="text-xl font-black tabular-nums">{fmt(calc.balance)}</span>
-              </div>
+            )}
+
+            <SplitTender
+              due={Math.max(calc.balance, 0)}
+              value={split}
+              onChange={setSplit}
+              details={tenderDetails}
+              onDetailsChange={setTenderDetails}
+              savedCards={savedCards}
+              savedBanks={savedBanks}
+              onPay={docId && canPay ? () => void paySplit() : undefined}
+              disabled={readOnly}
+              busy={payingSplit}
+              note={
+                !docId
+                  ? 'Save the order first — a payment is recorded against a saved order.'
+                  : !canPay
+                    ? 'You do not have permission to take payments.'
+                    : undefined
+              }
+            />
+
+            <div className="mt-4 flex items-center justify-between rounded-xl bg-brand-700 px-4 py-3 text-white">
+              <span className="text-sm font-bold">BALANCE</span>
+              <span className="text-xl font-black tabular-nums">{fmt(calc.balance)}</span>
             </div>
 
             <div className="mt-5">
-              <span className="label">Payment Mode</span>
-              <Seg
-                options={[
-                  { value: 'cash' as const, label: 'Cash' },
-                  { value: 'bank' as const, label: 'Bank' },
-                  { value: 'card' as const, label: 'Card' },
-                ]}
-                value={paymentMode}
-                onChange={setPaymentMode}
-              />
-            </div>
-            <div className="mt-4 space-y-3">
-              <Field label="Bank">
-                <TextInput value={bank} onChange={(e) => setBank(e.target.value)} disabled={readOnly} />
-              </Field>
-              <Field label="Credit Card No">
-                <TextInput value={creditCardNo} onChange={(e) => setCreditCardNo(e.target.value)} disabled={readOnly} className="font-mono" />
-              </Field>
-            </div>
-
-            <div className={`mt-5 grid gap-2 ${canPay ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              <button className="btn-soft !px-3 text-[13px]" onClick={() => setHistoryOpen(true)}>
+              <button className="btn-soft w-full !px-3 text-[13px]" onClick={() => setHistoryOpen(true)}>
                 Payment History
               </button>
-              {canPay && (
-                <button className="btn-primary !px-3 text-[13px]" onClick={() => setPayOpen(true)} disabled={readOnly}>
-                  Part Payment
-                </button>
-              )}
             </div>
 
             {canClose && (
@@ -887,41 +1105,15 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               separately, billed. Both live here so the primary action is beside
               the figures it commits.
             */}
-            {mode === 'new'
-              ? canSave && (
-                  <button
-                    className="btn-primary mt-4 w-full"
-                    onClick={save}
-                    disabled={saving || readOnly}
-                  >
-                    {saving ? 'Saving…' : 'Save to Orders'}
-                  </button>
-                )
-              : (canSave || canConvert) && (
-                  <div className="mt-4 grid gap-2">
-                    {canSave && (
-                      <button className="btn-primary w-full" onClick={save} disabled={saving || readOnly}>
-                        {saving ? 'Saving…' : status === 'draft' ? 'Save to Orders' : 'Update Order'}
-                      </button>
-                    )}
-                    {canConvert && (
-                      <button
-                        className="btn-success w-full"
-                        onClick={() => setConvertOpen(true)}
-                        disabled={readOnly || status === 'closed' || status === 'draft'}
-                        title={
-                          status === 'draft'
-                            ? 'Finish the draft and save it to orders before converting'
-                            : status === 'closed'
-                              ? 'Reopen the order before converting'
-                              : 'Convert to sales bill'
-                        }
-                      >
-                        Convert to Sales →
-                      </button>
-                    )}
-                  </div>
-                )}
+            {canSave && (
+              <button
+                className="btn-primary mt-4 w-full"
+                onClick={save}
+                disabled={saving || readOnly}
+              >
+                {saving ? 'Saving…' : 'Save / Update Order'}
+              </button>
+            )}
             {mode === 'edit' && (
               <p className="mt-3 text-center text-[11px] text-ink-400">
                 Delivery {fmtDate(deliveryDate)} · Ref {ref}
@@ -940,24 +1132,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         seedName={partyName}
       />
 
-      <PaymentDialog
-        open={payOpen}
-        onClose={() => setPayOpen(false)}
-        payable={calc.balance}
-        onConfirm={confirmPayment}
-        confirmLabel="Confirm"
-        title="Part Payment"
-      />
-
-      <PaymentDialog
-        open={convertOpen}
-        onClose={() => setConvertOpen(false)}
-        payable={calc.balance}
-        onConfirm={confirmConvert}
-        confirmLabel="Convert"
-        title="Convert to Sales"
-      />
-
       <Modal
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
@@ -974,7 +1148,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 <th className="th">Date</th>
                 <th className="th">Mode</th>
                 <th className="th text-right">Amount</th>
-                <th className="th">Bank / Ref</th>
+                <th className="th">Details</th>
                 <th className="th text-right">Discount</th>
               </tr>
             </thead>
@@ -984,7 +1158,21 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   <td className="td">{fmtDate(p.date)}</td>
                   <td className="td capitalize">{p.mode}</td>
                   <td className="td text-right font-bold tabular-nums">{fmt(p.amount)}</td>
-                  <td className="td text-xs text-ink-500">{[p.bank, p.reference].filter(Boolean).join(' · ') || '—'}</td>
+                  {/* Whichever details that tender carried — a card is
+                      recognised by its last four, a transfer by its bank
+                      and reference. */}
+                  <td className="td text-xs text-ink-500">
+                    {[
+                      p.cardLast4 ? `•••• ${p.cardLast4}` : '',
+                      p.cardHolder,
+                      p.cardExpiry,
+                      p.bank,
+                      p.iban ? `…${p.iban.slice(-4)}` : '',
+                      p.reference,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || '—'}
+                  </td>
                   <td className="td text-right tabular-nums">{fmt(p.discount)}</td>
                 </tr>
               ))}
