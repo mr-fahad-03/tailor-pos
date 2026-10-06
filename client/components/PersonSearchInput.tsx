@@ -22,7 +22,7 @@ export function PersonSearchInput({
   ledgerId,
   disabled,
   className = '',
-  placeholder = "Person's name",
+  placeholder = "Person's name — type to find saved measurements",
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -51,13 +51,20 @@ export function PersonSearchInput({
   useEffect(() => {
     if (!open || disabled) return;
     const term = value.trim();
-    if (term.length < 1) {
+    // An empty box on an order that already names a customer shows that
+    // customer's own people straight away — their measurements are what the
+    // counter wants nine times out of ten, and nobody should have to guess at
+    // a name to find out they are on file. With no customer chosen yet there
+    // is nothing to narrow by, so wait for something to be typed.
+    if (!term && !ledgerId) {
       setResults([]);
       return;
     }
     const t = setTimeout(async () => {
       try {
-        const r = await api.measurements.search(term, 1, 10);
+        const r = term
+          ? await api.measurements.search(term, 1, 10)
+          : await api.measurements.list(ledgerId!);
         // This order's own customer first; everyone else after.
         const mine = r.items.filter((p) => ledgerId && p.ledgerId === ledgerId);
         const others = r.items.filter((p) => !ledgerId || p.ledgerId !== ledgerId);
