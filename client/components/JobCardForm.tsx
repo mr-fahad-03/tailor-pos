@@ -20,7 +20,6 @@ import { useAuth } from './AuthContext';
 import { MeasurementSets, materialsTotal, newSet, type EditableSet } from './MeasurementSets';
 import {
   Card,
-  Checkbox,
   DateInput,
   Field,
   NumberInput,
@@ -147,6 +146,8 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     // left wholly blank, so this costs nothing if it goes unused.
     return saved.length === 0 && mode === 'new' ? [newSet()] : saved;
   });
+  // No longer asked for on the form. Kept so that re-saving an order written
+  // before the field was removed does not strip what it was saved with.
   const [fabricConsumption, setFabricConsumption] = useState(
     initial?.measurements?.FABRIC_CONSUMPTION ?? '',
   );
@@ -190,7 +191,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   const { can } = useAuth();
   const canSave = mode === 'new' ? can('jobcards.create') : can('jobcards.edit');
   const canPay = can('jobcards.payment');
-  const canClose = can('jobcards.close');
   const canAddLedger = can('ledgers.manage');
 
   // New mode: fetch next number
@@ -236,6 +236,20 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     const qtyCount = r2(charged.reduce((s, r) => s + r.qty, 0));
     return { rows, total, additionalCharges: extra, discount: d, tax, netAmount, advance, advanceBeforeTax, advanceTax, balance, materialTotal, itemCount, qtyCount };
   }, [items, discount, additionalCharges, payments, sets, taxRate]);
+
+  /**
+   * What this customer owed before this order.
+   *
+   * The server's figure counts every open order they have, which on an edit
+   * page includes this one — so its own saved balance comes back off, or the
+   * order would appear to be chasing itself. A new order is not saved yet and
+   * so is not in the figure at all.
+   */
+  const priorDue = useMemo(() => {
+    const all = due?.due ?? 0;
+    const mine = mode === 'edit' ? num(initial?.balance) : 0;
+    return r2(all - mine);
+  }, [due, mode, initial?.balance]);
 
   function loadDoc(d: JobCard) {
     setNo(d.no ?? null);
@@ -342,7 +356,11 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     }
   }
 
-  async function save() {
+  /**
+   * @param andPrint hand over to the order's invoice with the print dialog
+   *   opening, rather than staying on the form.
+   */
+  async function save(andPrint = false) {
     if (!partyName.trim()) {
       toast('Party A/c (customer) is required', 'error');
       return;
@@ -354,7 +372,9 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         settled.current = true;
         await rememberPeople();
         toast(`Order ${created.no} saved`);
-        router.push(`/job-cards/${created._id}`);
+        router.push(
+          andPrint ? `/job-cards/${created._id}/invoice?print=1` : `/job-cards/${created._id}`,
+        );
       } else if (docId) {
         // Saving a draft in full is what promotes it to a real order.
         const updated = await api.jobCards.update(docId, {
@@ -369,6 +389,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
             ? `Draft saved to orders as ${updated.no}`
             : `Order ${updated.no} updated`,
         );
+        if (andPrint) router.push(`/job-cards/${docId}/invoice?print=1`);
       }
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Save failed', 'error');
@@ -385,7 +406,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
    */
   function hasContent(): boolean {
     if (partyName.trim() || phone.trim()) return true;
-    if (fabricConsumption.trim()) return true;
     if (num(discount) || num(additionalCharges) || num(jobCost)) return true;
     if (items.some((r) => r.code.trim() || r.productName.trim() || num(r.rate))) return true;
     return sets.some(
@@ -521,27 +541,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     }
   }
 
-  async function closeCard() {
-    if (!docId) return;
-    try {
-      const d = await api.jobCards.close(docId);
-      loadDoc(d);
-      toast('Stitching order closed');
-    } catch (e) {
-      toast(e instanceof Error ? e.message : 'Close failed', 'error');
-    }
-  }
-
-  async function reopenCard() {
-    if (!docId) return;
-    try {
-      const d = await api.jobCards.reopen(docId);
-      loadDoc(d);
-      toast('Stitching order reopened');
-    } catch (e) {
-      toast(e instanceof Error ? e.message : 'Reopen failed', 'error');
-    }
-  }
 
   /**
    * Record the split as one payment per tender used.
@@ -730,39 +729,30 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
   return (
     <div>
-      {/* header — the title sits left while the navigation is centred on the
-          page. Equal 1fr columns either side of an auto one is what centres
-          it; `justify-between` would only centre it between the title and the
-          right-hand edge. Saving lives in the payment panel beside the figures
-          it commits, so nothing else belongs up here. */}
-      <div className="mb-5 grid grid-cols-1 items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
-        <div>
-          <h1 className="page-title">New Order</h1>
-          <p className="page-sub">
-            {mode === 'new' ? 'Create a new tailoring order' : `Editing order ${no ?? ''}`}
-          </p>
+      {/* The page's own name was taken off: the sidebar already says which
+          screen this is, and the invoice number in the card below says which
+          order. Only the record navigation is left, centred on the page, and
+          a new order has nothing to step between. */}
+      {mode === 'edit' && (
+        <div className="mb-5 flex items-center justify-center gap-3">
+          <button
+            className="btn-soft"
+            onClick={() => navigate('prev')}
+            disabled={!neighbours.prev}
+            title={neighbours.prev ? 'Go to the previous order' : 'This is the first order'}
+          >
+            ‹‹ Previous Order
+          </button>
+          <button
+            className="btn-soft"
+            onClick={() => navigate('next')}
+            disabled={!neighbours.next}
+            title={neighbours.next ? 'Go to the next order' : 'This is the last order'}
+          >
+            Next Order ››
+          </button>
         </div>
-        {mode === 'edit' && (
-          <div className="flex items-center justify-center gap-3">
-            <button
-              className="btn-soft"
-              onClick={() => navigate('prev')}
-              disabled={!neighbours.prev}
-              title={neighbours.prev ? 'Go to the previous order' : 'This is the first order'}
-            >
-              ‹‹ Previous Order
-            </button>
-            <button
-              className="btn-soft"
-              onClick={() => navigate('next')}
-              disabled={!neighbours.next}
-              title={neighbours.next ? 'Go to the next order' : 'This is the last order'}
-            >
-              Next Order ››
-            </button>
-          </div>
-        )}
-      </div>
+      )}
 
       {status === 'draft' && (
         <div className="mb-5 rounded-2xl border border-brass-200 bg-brass-50 px-5 py-3 text-sm font-semibold text-brass-800">
@@ -800,20 +790,22 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                     at the counter knows to ask for it. It covers their opening
                     balance, unpaid orders and unpaid bills — this order is not
                     in it until it is saved. A negative figure is credit. */}
-                {due && due.due !== 0 && (
+                {due && priorDue !== 0 && (
                   <p
                     className={`mt-1 text-[11px] font-bold ${
-                      due.due > 0 ? 'text-rose-600' : 'text-brand-700'
+                      priorDue > 0 ? 'text-rose-600' : 'text-brand-700'
                     }`}
                     title={
-                      due.due > 0
-                        ? `Opening ${fmt(due.openingBalance)} + unpaid orders ${fmt(due.orderDue)} + unpaid bills ${fmt(due.saleDue)}`
+                      priorDue > 0
+                        ? `Opening ${fmt(due.openingBalance)} + unpaid orders ${fmt(due.orderDue)} + unpaid bills ${fmt(due.saleDue)}${
+                            mode === 'edit' ? ', less this order' : ''
+                          }`
                         : 'This customer has paid ahead'
                     }
                   >
-                    {due.due > 0
-                      ? `Due Balance: ${fmt(due.due)} AED`
-                      : `In credit: ${fmt(Math.abs(due.due))} AED`}
+                    {priorDue > 0
+                      ? `Due Balance: ${fmt(priorDue)} AED`
+                      : `In credit: ${fmt(Math.abs(priorDue))} AED`}
                   </p>
                 )}
               </Field>
@@ -961,11 +953,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               ledgerId={ledgerId || undefined}
               readOnly={readOnly}
             />
-            <div className="mt-4 max-w-xs border-t border-ink-100 pt-4">
-              <Field label="Fabric Consumption">
-                <TextInput value={fabricConsumption} onChange={(e) => setFabricConsumption(e.target.value)} disabled={readOnly} />
-              </Field>
-            </div>
 
             <div className="mt-6 flex flex-wrap items-end justify-end gap-4 border-t border-ink-100 pt-5">
               <Field label="Material Total" className="w-40">
@@ -1017,21 +1004,39 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
             {/* The count rides on the bar rather than taking a row of its own,
                 so the figures above read as one unbroken sum. */}
-            <div className="mt-3 rounded-xl bg-brand-700 px-4 py-3 text-center text-white">
-              <p className="text-2xl font-black tabular-nums leading-none">
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-brand-700 px-4 py-3 text-white">
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-white/80">
+                  Total Payable
+                </p>
+                <p className="mt-0.5 text-[11px] font-medium text-white/60">
+                  Items: {calc.itemCount} · Quantity: {fmt(calc.qtyCount)}
+                </p>
+              </div>
+              <p className="shrink-0 text-2xl font-black tabular-nums leading-none">
                 {fmt(calc.netAmount)}
-              </p>
-              <p className="mt-1 text-[11px] font-bold uppercase tracking-widest text-white/75">
-                Total Payable
-              </p>
-              <p className="mt-1 text-[11px] font-medium text-white/60">
-                Items: {calc.itemCount} · Quantity: {fmt(calc.qtyCount)}
               </p>
             </div>
 
-            <h2 className="mb-4 mt-5 border-t border-ink-100 pt-5 text-base font-extrabold tracking-tight text-ink-900">
-              Payment
-            </h2>
+            {/* What they already owed, beside the way to go and look at it.
+                Shown, not added: Total Payable is this order's own value, and
+                folding an earlier debt into it would put the wrong figure on
+                this invoice and charge tax on it a second time. */}
+            <div className="mt-2 flex items-center justify-between gap-3 text-[13px] font-bold">
+              {priorDue > 0 ? (
+                <span className="text-rose-600">Due Balance: {fmt(priorDue)}</span>
+              ) : (
+                <span />
+              )}
+              <button
+                className="text-rose-600 underline-offset-2 hover:underline"
+                onClick={() => setHistoryOpen(true)}
+              >
+                Order History
+              </button>
+            </div>
+
+            <div className="mb-4 mt-4 border-t border-ink-100" />
 
             {/* Anything already taken, so the pad below only ever counts what
                 is being handed over now. */}
@@ -1072,34 +1077,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               }
             />
 
-            <div className="mt-4 flex items-center justify-between rounded-xl bg-brand-700 px-4 py-3 text-white">
-              <span className="text-sm font-bold">BALANCE</span>
-              <span className="text-xl font-black tabular-nums">{fmt(calc.balance)}</span>
-            </div>
-
-            <div className="mt-5">
-              <button className="btn-soft w-full !px-3 text-[13px]" onClick={() => setHistoryOpen(true)}>
-                Payment History
-              </button>
-            </div>
-
-            {canClose && (
-            <div className="mt-4 flex items-center justify-between rounded-xl bg-ink-50 px-4 py-3">
-              <Checkbox
-                label="Closed"
-                checked={status === 'closed'}
-                onChange={(v) => {
-                  if (v) void closeCard();
-                  else void reopenCard();
-                }}
-              />
-              {status === 'closed' && (
-                <button className="btn-soft !py-1.5 text-xs" onClick={reopenCard}>
-                  Reopen
-                </button>
-              )}
-            </div>
-            )}
 
             {/*
               A new order can only be saved; an existing one can be updated and,
@@ -1107,13 +1084,22 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               the figures it commits.
             */}
             {canSave && (
-              <button
-                className="btn-primary mt-4 w-full"
-                onClick={save}
-                disabled={saving || readOnly}
-              >
-                {saving ? 'Saving…' : 'Save / Update Order'}
-              </button>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <button
+                  className="btn-primary"
+                  onClick={() => void save(true)}
+                  disabled={saving || readOnly}
+                >
+                  {saving ? 'Saving…' : 'Save & Print'}
+                </button>
+                <button
+                  className="btn-soft"
+                  onClick={() => void save(false)}
+                  disabled={saving || readOnly}
+                >
+                  {saving ? 'Saving…' : 'Save Only'}
+                </button>
+              </div>
             )}
             {mode === 'edit' && (
               <p className="mt-3 text-center text-[11px] text-ink-400">

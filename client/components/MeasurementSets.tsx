@@ -355,24 +355,9 @@ export function MeasurementSets({
 
                 {!isShut && (
                   <div className="p-3">
-                    <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <Field label="Fabric">
-                        <TextInput
-                          value={s.fabric ?? ''}
-                          onChange={(e) => patch(s.uid, { fabric: e.target.value })}
-                          disabled={readOnly}
-                          className="input-sm"
-                        />
-                      </Field>
-                      <Field label="Size">
-                        <TextInput
-                          value={s.size ?? ''}
-                          onChange={(e) => patch(s.uid, { size: e.target.value })}
-                          disabled={readOnly}
-                          className="input-sm"
-                        />
-                      </Field>
-                    </div>
+                    {/* Fabric and size are no longer asked for here. The
+                        fields stay on the record so older orders keep what
+                        they were saved with. */}
                     <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 lg:grid-cols-6">
                       {MEASURE_FIELDS.map((f) => (
                         <Field key={f} label={f}>

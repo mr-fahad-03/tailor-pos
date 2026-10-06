@@ -125,7 +125,7 @@ export function SplitTender({
   onPay,
   disabled = false,
   busy = false,
-  payLabel = 'Pay Now',
+  payLabel = 'Advance',
   note,
 }: {
   /** What this payment has to cover. */
@@ -158,13 +158,10 @@ export function SplitTender({
 
   return (
     <div>
-      {/* what has to be covered */}
-      <p className="text-center text-2xl font-black tabular-nums text-ink-900">
-        {fmt(due)} <span className="text-sm font-bold text-ink-400">AED</span>
-      </p>
-
-      {/* which tender the box below is counting */}
-      <div className="mt-4 flex flex-wrap justify-center gap-2">
+      {/* What has to be covered is not restated here: the Total Payable bar
+          above the pad already carries it, and the green pill below puts the
+          outstanding figure one tap from the box that counts it. */}
+      <div className="flex flex-wrap justify-center gap-2">
         {MODES.map((m) => {
           const on = mode === m.value;
           return (
@@ -411,27 +408,28 @@ export function SplitTender({
         })}
       </div>
 
-      {/* commit, with what is being handed over and what goes back */}
-      <div className="mt-4 flex items-center gap-2 rounded-xl bg-ink-50 p-2">
+      {/* commit, with what is being handed over */}
+      <div className="mt-4 flex items-center gap-3 rounded-xl bg-ink-50 p-2">
         <button
           type="button"
           onClick={onPay}
           disabled={disabled || busy || !onPay || taken <= 0}
-          className="flex shrink-0 items-center gap-2 rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex shrink-0 items-center gap-2 rounded-xl bg-brand-700 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {busy ? 'Saving…' : payLabel}
         </button>
-        <span className="flex-1 text-center text-sm font-black tabular-nums text-ink-900">
-          {fmt(taken)} AED
-        </span>
-        <span
-          className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] font-bold tabular-nums ${
-            change > 0 ? 'bg-brass-100 text-brass-800' : 'text-ink-400'
-          }`}
-        >
-          {fmt(change)} AED Return
+        <span className="flex-1 text-right text-base font-black tabular-nums text-ink-900">
+          {fmt(taken)} <span className="text-xs font-bold text-ink-400">AED</span>
         </span>
       </div>
+      {/* Change is only worth a line when there actually is some: handing back
+          cash is a real step, and a permanent "0.00 Return" teaches the eye to
+          skip the one time it matters. */}
+      {change > 0 && (
+        <p className="mt-1 text-right text-[13px] font-bold tabular-nums text-brass-700">
+          {fmt(change)} AED Return
+        </p>
+      )}
       {note && <p className="mt-2 text-center text-[11px] text-ink-500">{note}</p>}
     </div>
   );
