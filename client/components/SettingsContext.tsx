@@ -33,7 +33,7 @@ const DEFAULTS: AppSettings = {
     chequeFavour: '',
     note: '',
   },
-  invoiceTitle: 'Performa Invoice',
+  invoiceTitle: 'Order Invoice',
 };
 
 const SettingsCtx = createContext<{

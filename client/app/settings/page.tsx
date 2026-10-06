@@ -41,7 +41,7 @@ export default function SettingsPage() {
       // field like a line of text, and there is no whitespace in one anyway.
       company: { ...trim(form.company), logo: form.company.logo, brandLogo: form.company.brandLogo },
       bank: trim(form.bank),
-      invoiceTitle: String(form.invoiceTitle || '').trim() || 'Performa Invoice',
+      invoiceTitle: String(form.invoiceTitle || '').trim() || 'Order Invoice',
     };
     save(cleaned);
     setForm(cleaned);
@@ -95,7 +95,7 @@ export default function SettingsPage() {
             <TextInput
               value={form.invoiceTitle}
               onChange={(e) => update('invoiceTitle', e.target.value)}
-              placeholder="Performa Invoice"
+              placeholder="Order Invoice"
             />
           </Field>
           <LogoField

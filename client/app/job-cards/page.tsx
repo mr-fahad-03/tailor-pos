@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { fmt, fmtDate, orderNo } from '@/lib/format';
 import type { JobCard } from '@/lib/types';
@@ -20,6 +20,7 @@ function JobCardsInner() {
   const canConvert = can('jobcards.convert');
   // The log is the owner's view of who touched what — role, not a permission.
   const isSuperAdmin = user?.role === 'super_admin';
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialQ = searchParams?.get('q') ?? '';
 
@@ -192,7 +193,18 @@ function JobCardsInner() {
               </thead>
               <tbody className="divide-y divide-ink-50">
                 {rows.map((j) => (
-                  <tr key={j._id} className="transition hover:bg-brand-50/50">
+                  <tr
+                    key={j._id}
+                    // The row is the order: clicking any of it opens it. The
+                    // tick box, the number and the two actions keep their own
+                    // jobs, so none of them has to fight the row for a click.
+                    onClick={(e) => {
+                      const el = e.target as HTMLElement;
+                      if (el.closest('a, button, input, label')) return;
+                      router.push(`/job-cards/${j._id}`);
+                    }}
+                    className="cursor-pointer transition hover:bg-brand-50/50"
+                  >
                     {canConvert && (
                       <td className="td">
                         <input
