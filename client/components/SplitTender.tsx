@@ -96,7 +96,7 @@ function Labelled({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[11px] font-bold text-ink-600">{label}</span>
+      <span className="mb-0.5 block text-[10px] font-bold text-ink-600">{label}</span>
       {children}
     </label>
   );
@@ -171,13 +171,13 @@ export function SplitTender({
               disabled={disabled}
               onClick={() => setMode(m.value)}
               aria-pressed={on}
-              className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[13px] font-bold transition disabled:opacity-50 ${
+              className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition disabled:opacity-50 ${
                 on
                   ? 'border-brand-700 bg-brand-700 text-white'
                   : 'border-ink-200 bg-white text-ink-700 hover:border-brand-400 hover:text-brand-700'
               }`}
             >
-              <Icon name={m.icon} className="h-4 w-4" />
+              <Icon name={m.icon} className="h-3.5 w-3.5" />
               {m.label}
             </button>
           );
@@ -185,7 +185,7 @@ export function SplitTender({
       </div>
 
       {/* one tap to put everything still owed on the chosen tender */}
-      <div className="mt-3 flex justify-center">
+      <div className="mt-2 flex justify-center">
         <button
           type="button"
           disabled={disabled || remaining <= 0}
@@ -193,14 +193,14 @@ export function SplitTender({
           title={`Put the whole ${fmt(remaining)} AED still owed on ${
             MODES.find((m) => m.value === mode)?.label
           }`}
-          className="rounded-full bg-brand-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-full bg-brand-600 px-4 py-1.5 text-[13px] font-bold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {fmt(remaining)} AED
         </button>
       </div>
 
       {/* counting box for the chosen tender, and what is left after it */}
-      <div className="mt-4 flex items-center gap-3 rounded-xl bg-ink-50 px-3 py-2">
+      <div className="mt-2.5 flex items-center gap-2 rounded-xl bg-ink-50 px-2 py-1.5">
         <input
           type="number"
           min="0"
@@ -211,10 +211,10 @@ export function SplitTender({
           onChange={(e) => set(mode, e.target.value)}
           placeholder="0"
           aria-label={`Amount taken by ${MODES.find((m) => m.value === mode)?.label}`}
-          className="input input-sm w-28 bg-white text-right font-bold tabular-nums"
+          className="input input-sm w-24 bg-white text-right font-bold tabular-nums"
         />
         <span
-          className={`text-sm font-bold tabular-nums ${
+          className={`text-[13px] font-bold tabular-nums ${
             remaining > 0 ? 'text-brass-700' : 'text-brand-700'
           }`}
         >
@@ -224,9 +224,9 @@ export function SplitTender({
 
       {/* the details that belong to the tender being counted */}
       {mode === 'card' && (
-        <div className="mt-3 rounded-xl border border-ink-200 bg-white p-3">
+        <div className="mt-2.5 rounded-xl border border-ink-200 bg-white p-2.5">
           {savedCards.length > 0 && (
-            <div className="mb-3 flex flex-wrap gap-1.5">
+            <div className="mb-2 flex flex-wrap gap-1.5">
               {savedCards.map((c, i) => (
                 <button
                   key={c._id ?? i}
@@ -253,7 +253,7 @@ export function SplitTender({
               ))}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-2">
             <Labelled label="Card Name">
               <input
                 {...noAutofill}
@@ -306,9 +306,9 @@ export function SplitTender({
       )}
 
       {mode === 'bank' && (
-        <div className="mt-3 rounded-xl border border-ink-200 bg-white p-3">
+        <div className="mt-2.5 rounded-xl border border-ink-200 bg-white p-2.5">
           {savedBanks.length > 0 && (
-            <div className="mb-3 flex flex-wrap gap-1.5">
+            <div className="mb-2 flex flex-wrap gap-1.5">
               {savedBanks.map((b, i) => (
                 <button
                   key={b._id ?? i}
@@ -335,7 +335,7 @@ export function SplitTender({
               ))}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-2">
             <Labelled label="Bank Name">
               <input
                 value={details.bank.bankName}
@@ -380,13 +380,13 @@ export function SplitTender({
       )}
 
       {/* every tender at once, so nothing is counted twice or forgotten */}
-      <div className="mt-3 grid grid-cols-3 gap-2">
+      <div className="mt-2.5 grid grid-cols-3 gap-1.5">
         {MODES.map((m) => {
           const amt = num(value[m.value]);
           return (
             <div key={m.value} className="text-center">
               <div
-                className={`flex items-center justify-center gap-1.5 rounded-full px-2 py-1.5 text-[13px] font-bold tabular-nums ${
+                className={`flex items-center justify-center gap-1 rounded-full px-2 py-1 text-xs font-bold tabular-nums ${
                   amt > 0 ? 'bg-brand-50 text-brand-800' : 'bg-ink-50 text-ink-400'
                 }`}
               >
@@ -402,23 +402,23 @@ export function SplitTender({
                   ✕
                 </button>
               </div>
-              <p className="mt-1 text-[11px] font-medium text-ink-500">{m.label}</p>
+              <p className="mt-0.5 text-[10px] font-medium text-ink-500">{m.label}</p>
             </div>
           );
         })}
       </div>
 
       {/* commit, with what is being handed over */}
-      <div className="mt-4 flex items-center gap-3 rounded-xl bg-ink-50 p-2">
+      <div className="mt-2.5 flex items-center gap-2 rounded-xl bg-ink-50 p-1.5">
         <button
           type="button"
           onClick={onPay}
           disabled={disabled || busy || !onPay || taken <= 0}
-          className="flex shrink-0 items-center gap-2 rounded-xl bg-brand-700 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex shrink-0 items-center gap-2 rounded-xl bg-brand-700 px-4 py-2 text-[13px] font-bold text-white transition hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {busy ? 'Saving…' : payLabel}
         </button>
-        <span className="flex-1 text-right text-base font-black tabular-nums text-ink-900">
+        <span className="flex-1 text-right text-sm font-black tabular-nums text-ink-900">
           {fmt(taken)} <span className="text-xs font-bold text-ink-400">AED</span>
         </span>
       </div>
@@ -430,7 +430,7 @@ export function SplitTender({
           {fmt(change)} AED Return
         </p>
       )}
-      {note && <p className="mt-2 text-center text-[11px] text-ink-500">{note}</p>}
+      {note && <p className="mt-1.5 text-center text-[10px] leading-snug text-ink-500">{note}</p>}
     </div>
   );
 }

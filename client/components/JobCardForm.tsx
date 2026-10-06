@@ -245,6 +245,13 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
    * order would appear to be chasing itself. A new order is not saved yet and
    * so is not in the figure at all.
    */
+  /**
+   * What the order cost the shop to make: the materials booked against each
+   * person, plus whatever the stitching itself was costed at. It sits just
+   * before the order amount, so the margin reads as the step between them.
+   */
+  const totalCost = useMemo(() => r2(calc.materialTotal + num(jobCost)), [calc.materialTotal, jobCost]);
+
   const priorDue = useMemo(() => {
     const all = due?.due ?? 0;
     const mine = mode === 'edit' ? num(initial?.balance) : 0;
@@ -729,10 +736,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
   return (
     <div>
-      {/* The page's own name was taken off: the sidebar already says which
-          screen this is, and the invoice number in the card below says which
-          order. Only the record navigation is left, centred on the page, and
-          a new order has nothing to step between. */}
       {mode === 'edit' && (
         <div className="mb-5 flex items-center justify-center gap-3">
           <button
@@ -772,11 +775,21 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         <div className="space-y-6 xl:col-span-2">
           {/* header fields */}
           <Card className="p-5">
+            {/* The number the order is called, set over the form rather than
+                boxed in beside the fields: it is read out and quoted, never
+                typed into, so it reads as a title. */}
+            <div className="mb-5 flex items-baseline justify-center gap-3">
+              <p className="text-lg font-extrabold tracking-tight text-ink-900">
+                {no == null && draftNo != null ? 'Draft NO:' : 'Order NO:'}
+              </p>
+              <p className="text-3xl font-black leading-none tabular-nums text-ink-900">
+                {no ?? (draftNo != null ? draftNo : '…')}
+              </p>
+            </div>
+
             {/* One 12-column grid whose spans fill exactly two rows, in the
-                order the counter works: who the order is for, then what it is
-                numbered. The two customer buttons share one slot, which is
-                always rendered — empty if the user may not add ledgers — so
-                the spans never reshuffle. */}
+                order the counter works: who the order is for and what it is
+                referenced by, then the book it came out of and its dates. */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-12">
               <Field label="Party A/c (Customer)" className="col-span-2 sm:col-span-5">
                 <TextInput
@@ -809,11 +822,8 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   </p>
                 )}
               </Field>
-              <Field label="Phone" className="sm:col-span-3">
-                <TextInput value={phone} onChange={(e) => setPhone(e.target.value)} disabled={readOnly} className="font-mono" />
-              </Field>
-              {/* Find an existing customer, or add one. Both act on the same
-                  field, so they sit together rather than either one being
+              {/* Find an existing customer, or add one. Both act on the field
+                  beside them, so they sit together rather than either being
                   spelled out in a button wide enough to say so. */}
               <Field label="&nbsp;" className="sm:col-span-2">
                 <div className="flex gap-2">
@@ -821,7 +831,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                     className="btn-soft shrink-0"
                     onClick={() => { setLedgerMode('search'); setLedgerOpen(true); }}
                     disabled={readOnly}
-                    title="Find ledger (F2)"
+                    title="Find an existing customer in the ledger"
                     aria-label="Find ledger"
                   >
                     <Icon name="search" className="h-[17px] w-[17px]" />
@@ -839,34 +849,31 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   )}
                 </div>
               </Field>
-              {/* Read-only, so it is set rather than boxed like something to
-                  type into — and big, because it is what the order is called. */}
-              <Field
-                label={no == null && draftNo != null ? 'Draft No' : 'Invoice No'}
-                className="sm:col-span-2 text-right"
-              >
-                <p className="truncate text-2xl font-black leading-[38px] tabular-nums text-ink-900">
-                  {no ?? (draftNo != null ? `DRAFT-${draftNo}` : '…')}
-                </p>
+              <Field label="Ref" className="col-span-2 sm:col-span-5">
+                <TextInput value={ref} onChange={(e) => setRef(e.target.value)} disabled={readOnly} className="font-mono" />
               </Field>
+
               <Field label="Book No" className="sm:col-span-2">
-                {/* An identifier, not a figure: it reads left like Invoice No and
-                    Ref beside it, rather than right like Qty, Rate and Amount.
-                    `!` because NumberInput's own text-right would otherwise win. */}
+                {/* An identifier, not a figure: it reads left like Ref beside
+                    it, rather than right like Qty, Rate and Amount. `!`
+                    because NumberInput's own text-right would otherwise win. */}
                 <NumberInput value={bookNo} onChange={(e) => setBookNo(e.target.value)} disabled={readOnly} className="!text-left" />
               </Field>
-              <Field label="Ref" className="sm:col-span-4">
-                <div className="flex gap-2">
-                  <TextInput value={ref} onChange={(e) => setRef(e.target.value)} disabled={readOnly} className="font-mono" />
-                  <button className="btn-soft shrink-0" onClick={() => { setFindOpen(true); setFindQ(''); setFindRows([]); }}>
-                    Find
-                  </button>
-                </div>
+              {/* Opens the search over past orders — it belongs beside Book No
+                  because the book number is what people search back by. */}
+              <Field label="&nbsp;" className="sm:col-span-2">
+                <button
+                  className="btn-soft w-full"
+                  onClick={() => { setFindOpen(true); setFindQ(''); setFindRows([]); }}
+                  title="Find an earlier order"
+                >
+                  Find
+                </button>
               </Field>
-              <Field label="Date" className="sm:col-span-3">
+              <Field label="Date" className="sm:col-span-4">
                 <DateInput value={date} onChange={(e) => setDate(e.target.value)} disabled={readOnly} />
               </Field>
-              <Field label="Delivery Date" className="sm:col-span-3">
+              <Field label="Delivery Date" className="sm:col-span-4">
                 <DateInput value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} disabled={readOnly} />
               </Field>
             </div>
@@ -954,12 +961,38 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               readOnly={readOnly}
             />
 
-            <div className="mt-6 flex flex-wrap items-end justify-end gap-4 border-t border-ink-100 pt-5">
-              <Field label="Material Total" className="w-40">
-                <TextInput value={fmt(calc.materialTotal)} readOnly className="bg-ink-50 text-right font-bold tabular-nums" />
+            {/* The cost built up from its parts, then what the order is
+                worth: materials, the stitching, the two added, and last what
+                the customer pays — so the margin is the step between the
+                final two. Ranged left, where the eye lands coming off the
+                measurements above. */}
+            <div className="mt-6 flex flex-wrap items-end justify-start gap-4 border-t border-ink-100 pt-5">
+              <Field label="Material Cost" className="w-40">
+                <TextInput
+                  value={fmt(calc.materialTotal)}
+                  readOnly
+                  title="Everything booked under Materials Used, for every person on this order"
+                  className="bg-ink-50 text-right font-bold tabular-nums"
+                />
               </Field>
               <Field label="Job Cost" className="w-40">
                 <NumberInput value={jobCost} onChange={(e) => setJobCost(e.target.value)} disabled={readOnly} />
+              </Field>
+              <Field label="Total Cost" className="w-40">
+                <TextInput
+                  value={fmt(totalCost)}
+                  readOnly
+                  title="Material Cost + Job Cost"
+                  className="bg-ink-50 text-right font-bold tabular-nums"
+                />
+              </Field>
+              <Field label="Total Order Amount" className="w-40">
+                <TextInput
+                  value={fmt(calc.netAmount)}
+                  readOnly
+                  title="What the customer pays, tax included"
+                  className="bg-ink-50 text-right font-bold tabular-nums"
+                />
               </Field>
             </div>
           </Card>
@@ -967,13 +1000,13 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
         {/* right payment panel */}
         <div>
-          <Card className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto p-5">
+          <Card className="sticky top-20 max-h-[calc(100vh-5.5rem)] overflow-y-auto p-4">
             {/* The chain the counter reads out, in the order the money is
                 actually worked out: what the goods come to, what is added or
                 taken off, the tax on the result, then the one figure the
                 customer hands over. Each row follows from the ones above it,
                 so the two that are typed into sit where they take effect. */}
-            <div className="space-y-2 text-[13px]">
+            <div className="space-y-1.5 text-xs">
               <div className="flex items-center justify-between">
                 <span className="font-medium text-ink-500">Total without Tax</span>
                 <span className="font-bold tabular-nums">{fmt(calc.total)} AED</span>
@@ -984,7 +1017,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   value={additionalCharges}
                   onChange={(e) => setAdditionalCharges(e.target.value)}
                   disabled={readOnly}
-                  className="input-sm !w-32"
+                  className="input-sm !w-28"
                 />
               </div>
               <div className="flex items-center justify-between gap-3">
@@ -993,10 +1026,10 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   value={discount}
                   onChange={(e) => setDiscount(e.target.value)}
                   disabled={readOnly}
-                  className="input-sm !w-32"
+                  className="input-sm !w-28"
                 />
               </div>
-              <div className="flex items-center justify-between border-t border-ink-100 pt-2">
+              <div className="flex items-center justify-between border-t border-ink-100 pt-1.5">
                 <span className="font-medium text-ink-500">Tax ({taxRate}% VAT)</span>
                 <span className="font-bold tabular-nums">+ {fmt(calc.tax)} AED</span>
               </div>
@@ -1004,16 +1037,16 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
             {/* The count rides on the bar rather than taking a row of its own,
                 so the figures above read as one unbroken sum. */}
-            <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-brand-700 px-4 py-3 text-white">
+            <div className="mt-2.5 flex items-center justify-between gap-3 rounded-xl bg-brand-700 px-3.5 py-2.5 text-white">
               <div className="min-w-0">
                 <p className="text-[11px] font-bold uppercase tracking-widest text-white/80">
                   Total Payable
                 </p>
-                <p className="mt-0.5 text-[11px] font-medium text-white/60">
+                <p className="mt-0.5 text-[10px] font-medium text-white/60">
                   Items: {calc.itemCount} · Quantity: {fmt(calc.qtyCount)}
                 </p>
               </div>
-              <p className="shrink-0 text-2xl font-black tabular-nums leading-none">
+              <p className="shrink-0 text-xl font-black tabular-nums leading-none">
                 {fmt(calc.netAmount)}
               </p>
             </div>
@@ -1022,7 +1055,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 Shown, not added: Total Payable is this order's own value, and
                 folding an earlier debt into it would put the wrong figure on
                 this invoice and charge tax on it a second time. */}
-            <div className="mt-2 flex items-center justify-between gap-3 text-[13px] font-bold">
+            <div className="mt-1.5 flex items-center justify-between gap-3 text-xs font-bold">
               {priorDue > 0 ? (
                 <span className="text-rose-600">Due Balance: {fmt(priorDue)}</span>
               ) : (
@@ -1036,21 +1069,21 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               </button>
             </div>
 
-            <div className="mb-4 mt-4 border-t border-ink-100" />
+            <div className="mb-3 mt-3 border-t border-ink-100" />
 
             {/* Anything already taken, so the pad below only ever counts what
                 is being handed over now. */}
             {calc.advance > 0 && (
-              <div className="mb-4 space-y-2.5">
-                <div className="flex items-center justify-between rounded-xl bg-ink-50 px-4 py-2.5">
+              <div className="mb-3 space-y-1.5">
+                <div className="flex items-center justify-between rounded-xl bg-ink-50 px-3 py-2">
                   <span className="label !mb-0">Already Paid</span>
-                  <span className="text-sm font-extrabold tabular-nums">{fmt(calc.advance)}</span>
+                  <span className="text-[13px] font-extrabold tabular-nums">{fmt(calc.advance)}</span>
                 </div>
-                <div className="flex items-center justify-between px-1 text-sm">
+                <div className="flex items-center justify-between px-1 text-xs">
                   <span className="text-ink-500">Advance Before Tax</span>
                   <span className="font-semibold tabular-nums">{fmt(calc.advanceBeforeTax)}</span>
                 </div>
-                <div className="flex items-center justify-between px-1 text-sm">
+                <div className="flex items-center justify-between px-1 text-xs">
                   <span className="text-ink-500">Advance Tax</span>
                   <span className="font-semibold tabular-nums">{fmt(calc.advanceTax)}</span>
                 </div>
@@ -1084,16 +1117,16 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               the figures it commits.
             */}
             {canSave && (
-              <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="mt-3 grid grid-cols-2 gap-2.5">
                 <button
-                  className="btn-primary"
+                  className="btn-primary !py-2 text-[13px]"
                   onClick={() => void save(true)}
                   disabled={saving || readOnly}
                 >
                   {saving ? 'Saving…' : 'Save & Print'}
                 </button>
                 <button
-                  className="btn-soft"
+                  className="btn-soft !py-2 text-[13px]"
                   onClick={() => void save(false)}
                   disabled={saving || readOnly}
                 >
@@ -1102,7 +1135,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               </div>
             )}
             {mode === 'edit' && (
-              <p className="mt-3 text-center text-[11px] text-ink-400">
+              <p className="mt-2 text-center text-[10px] text-ink-400">
                 Delivery {fmtDate(deliveryDate)} · Ref {ref}
               </p>
             )}

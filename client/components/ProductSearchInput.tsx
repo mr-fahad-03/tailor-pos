@@ -78,9 +78,11 @@ export function ProductSearchInput({
         disabled={disabled}
         onChange={(e) => {
           onChange(e.target.value);
-          setOpen(true);
+          // Suggestions follow what is being typed, rather than greeting an
+          // empty box with the whole catalogue. Clearing the box shuts them
+          // again — F2 is still there to browse everything deliberately.
+          setOpen(e.target.value.trim().length > 0);
         }}
-        onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
           if (e.key === 'F2') setOpen(true);
           if (e.key === 'Enter' && results.length > 0) {

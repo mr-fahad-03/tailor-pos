@@ -22,6 +22,9 @@ export const newSet = (over: Partial<EditableSet> = {}): EditableSet => ({
   name: '',
   fabric: '',
   size: '',
+  // Fabric, size and qty are no longer asked for on the person row. They stay
+  // on the record so an older order re-saved here keeps what it was saved
+  // with — the line quantities live in Order Items.
   qty: 1,
   values: {},
   materials: [blankMaterial()],
@@ -329,18 +332,6 @@ export function MeasurementSets({
                   <span className="hidden text-[11px] font-medium text-ink-400 sm:inline">
                     {filled}/{MEASURE_FIELDS.length}
                   </span>
-                  <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
-                    Qty
-                    <input
-                      type="number"
-                      min="0"
-                      value={String(s.qty ?? 1)}
-                      onChange={(e) => patch(s.uid, { qty: Number(e.target.value) })}
-                      disabled={readOnly}
-                      aria-label={`Quantity for ${s.name || 'this person'}`}
-                      className="input input-sm w-14 text-center tabular-nums"
-                    />
-                  </label>
                   {!readOnly && (
                     <button
                       onClick={() => remove(s.uid)}
