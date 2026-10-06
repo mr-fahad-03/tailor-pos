@@ -53,7 +53,7 @@ function firstAllowedPath(can: (p: string) => boolean): string {
 
 function Splash() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ink-100">
+    <div className="flex min-h-screen items-center justify-center bg-white">
       <div className="flex flex-col items-center gap-3">
         <div className="flex h-12 w-12 animate-pulse items-center justify-center rounded-xl bg-brand-600 text-white">
           <Icon name="scissors" className="h-6 w-6" strokeWidth={2} />
@@ -111,15 +111,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const needed = requiredPermission(pathname);
   const allowed = needed === null || can(needed);
 
+  // The order screen is a form filled left to right across the whole window,
+  // so it runs to the edges: a strip of page around it is width the counter
+  // could be reading figures in. Every other screen opens with a title, which
+  // needs somewhere to sit.
+  const fullBleed = /^\/job-cards\/[^/]+$/.test(pathname);
+
   return (
     <div className="flex min-h-screen">
       <Sidebar open={navOpen} onClose={() => setNavOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onMenu={() => setNavOpen(true)} />
-        <main className="print-full mx-auto w-full max-w-[1400px] flex-1 p-4 sm:p-6">
+        <main className={`print-full mx-auto w-full max-w-[1400px] flex-1 ${fullBleed ? '' : 'p-2 sm:p-3'}`}>
           {allowed ? children : <NoAccess permission={needed as string} />}
         </main>
-        <footer className="no-print px-4 pb-5 text-center text-[11px] text-ink-400 sm:px-6">
+        <footer className="no-print px-4 pb-3 text-center text-[11px] text-ink-400 sm:px-6">
           Tailor POS · VAT 5% (UAE) · All amounts in AED
         </footer>
       </div>

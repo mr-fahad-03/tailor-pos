@@ -3,8 +3,31 @@
 @tailwind utilities;
 
 @layer base {
+  /* Tailwind's type and spacing are in rem, so the root size is the one dial
+     that shrinks the whole counter screen at once. Zooming the browser in
+     narrows the CSS viewport, which is what these steps answer: the figures
+     and the boxes around them give up a little size together, rather than one
+     column being crushed so the rest can keep theirs. */
+  html {
+    font-size: 16px;
+  }
+  @media (max-width: 1600px) {
+    html {
+      font-size: 15px;
+    }
+  }
+  @media (max-width: 1440px) {
+    html {
+      font-size: 14px;
+    }
+  }
+  @media (max-width: 1280px) {
+    html {
+      font-size: 13px;
+    }
+  }
   body {
-    @apply bg-ink-100 text-ink-800 antialiased;
+    @apply bg-white text-ink-800 antialiased;
   }
   ::-webkit-scrollbar {
     width: 10px;
@@ -79,6 +102,11 @@
   /* --- tables ----------------------------------------------------------- */
   .th {
     @apply whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-ink-500;
+  }
+  /* The bill screen's own head: a plain centred word over a column of boxes,
+     not a small-caps label over a column of figures. */
+  .th-s {
+    @apply whitespace-nowrap border-b border-ink-300 px-2 py-2 text-center text-[12px] font-bold text-ink-800;
   }
   .td {
     @apply whitespace-nowrap px-3 py-2.5 text-sm text-ink-700;

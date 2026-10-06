@@ -64,7 +64,7 @@ export default function ProductsPage() {
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <div>
           <h1 className="page-title">Products</h1>
           <p className="page-sub">{total} stitching items, fabrics & materials</p>
@@ -76,7 +76,7 @@ export default function ProductsPage() {
         )}
       </div>
 
-      <Card className="mb-5 p-4">
+      <Card className="mb-3 p-4">
         <TextInput
           value={q}
           onChange={(e) => setQ(e.target.value)}

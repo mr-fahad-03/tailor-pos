@@ -76,7 +76,6 @@ export function MeasurementSets({
 }) {
   const { toast } = useToast();
   const [profiles, setProfiles] = useState<MeasurementProfile[]>([]);
-  const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   /** Briefly ringed after being jumped to, so the eye finds it on arrival. */
   const [flash, setFlash] = useState('');
@@ -106,14 +105,11 @@ export function MeasurementSets({
       setProfiles([]);
       return;
     }
-    setLoadingProfiles(true);
     try {
       const res = await api.measurements.list(ledgerId);
       setProfiles(res.items);
     } catch {
       setProfiles([]);
-    } finally {
-      setLoadingProfiles(false);
     }
   }, [ledgerId]);
 
@@ -251,39 +247,28 @@ export function MeasurementSets({
               : `${sets.length} ${sets.length === 1 ? 'person' : 'people'} · ${totalPieces} ${totalPieces === 1 ? 'piece' : 'pieces'}`}
           </p>
         </div>
-        {!readOnly && (
-          <button className="btn-soft !py-1.5 text-xs" onClick={() => onChange([...sets, newSet()])}>
-            + Add person
-          </button>
-        )}
-      </div>
-
-      {/* people already on file for this customer */}
-      {ledgerId && (
-        <div className="mb-4 rounded-lg border border-ink-200 bg-ink-50/60 p-3">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-ink-500">
-            Saved for this customer
-          </p>
-          {loadingProfiles ? (
-            <p className="text-xs text-ink-500">Loading…</p>
-          ) : profiles.length === 0 ? (
-            <p className="text-xs text-ink-500">
-              Nobody saved yet. Anyone you add below is kept for next time.
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
+        {/* Who this customer has on file sits beside Add person, because the
+            two are the same decision: tick somebody already measured, or make
+            a new one. Nothing shows when nobody is saved — an empty panel
+            explaining itself is worth less than the room it takes. */}
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+          {ledgerId && profiles.length > 0 && (
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
               {profiles.map((p) => {
                 const on = isOnOrder(p);
                 return (
                   <span
                     key={p._id}
-                    className={`inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[13px] font-semibold transition ${
+                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[12px] font-semibold transition ${
                       on
                         ? 'border-brand-600 bg-brand-50 text-brand-800'
                         : 'border-ink-300 bg-white text-ink-600 hover:border-ink-400'
                     }`}
                   >
-                    <label className="inline-flex cursor-pointer items-center gap-2">
+                    <label
+                      className="inline-flex cursor-pointer items-center gap-1.5"
+                      title={on ? `${p.name} is on this order` : `Put ${p.name} on this order`}
+                    >
                       <input
                         type="checkbox"
                         checked={on}
@@ -308,17 +293,19 @@ export function MeasurementSets({
               })}
             </div>
           )}
-          <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
-            Tick only the people being stitched for this time. Next visit you can tick fewer.
-          </p>
+          {!readOnly && (
+            <button className="btn-soft shrink-0 !py-1.5 text-xs" onClick={() => onChange([...sets, newSet()])}>
+              + Add person
+            </button>
+          )}
         </div>
-      )}
+      </div>
 
       {sets.length === 0 ? (
         <div className="rounded-lg border-2 border-dashed border-ink-200 bg-ink-50/50 px-4 py-8 text-center">
           <p className="text-sm font-semibold text-ink-700">No measurements yet</p>
           <p className="mt-1 text-xs text-ink-500">
-            Press <strong>Add person</strong>, or tick someone saved above.
+            Press <strong>Add person</strong>, or tick someone saved beside it.
           </p>
         </div>
       ) : (

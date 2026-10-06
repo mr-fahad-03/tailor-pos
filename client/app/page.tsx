@@ -132,14 +132,14 @@ export default function DashboardPage() {
       </div>
 
       {loading ? (
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="h-32 animate-pulse rounded-xl bg-ink-200" />
           ))}
         </div>
       ) : data ? (
         <>
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <PanelCard title="Sales" icon="coins">
               <div className="flex items-center gap-3">
                 <ul className="flex-1 space-y-1.5">
@@ -210,7 +210,7 @@ export default function DashboardPage() {
             </PanelCard>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-3">
             <Card className="p-5 xl:col-span-2">
               <SectionTitle
                 title="Total Orders"
@@ -350,7 +350,7 @@ export default function DashboardPage() {
           </div>
         </>
       ) : (
-        <div className="mt-6">
+        <div className="mt-3">
           <EmptyState
             title="Could not reach the API"
             sub="Make sure the server is running (npm run dev in server/) and MongoDB is up."

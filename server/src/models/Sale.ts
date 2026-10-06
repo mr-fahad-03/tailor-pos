@@ -3,15 +3,24 @@ import { Schema, model, models, Document, Types } from 'mongoose';
 export interface ISaleItem {
   code?: string;
   productName?: string;
+  /** How this line is sold — PIECE, GRAMS, METER. Copied off the product. */
+  unit?: string;
   qty: number;
   rate: number;
   netRate: number;
+  /** What was typed in the discount box, and whether it was a sum or a rate. */
+  discType?: 'fixed' | 'percent';
+  discInput?: number;
   discPercent: number;
   discAmt: number;
   grossAmt: number;
   taxPercent: number;
   taxAmt: number;
   netAmount: number;
+  /** Months of warranty given on this line, 0 for none. */
+  warranty?: number;
+  /** Anything the counter wants printed against the line. */
+  info?: string;
 }
 
 export interface ISale extends Document {
@@ -23,6 +32,10 @@ export interface ISale extends Document {
   creditCardNo?: string;
   jobCardRef?: string;
   jobCardId?: Types.ObjectId;
+  /** The stitching order this bill came out of, and the bill's own reference.
+      Both are set by the system and are not the counter's to change. */
+  bookingNo?: string;
+  refNo?: string;
   salesman: string;
   partyName?: string;
   phone?: string;
@@ -36,27 +49,42 @@ export interface ISale extends Document {
   grossAmount: number;
   discountAmt: number;
   additionalDiscount: number;
+  /** The bill-wide discount as it was entered — a rate or a flat sum. */
+  discountType?: 'percent' | 'fixed';
+  discountInput?: number;
   taxAmt: number;
   freight: number;
   advanceAmount: number;
   netAmount: number;
   balance: number;
   isReturn: boolean;
+  /** How the money was taken, where it was put, and anything said about it. */
+  paymentMethod?: string;
+  paymentAccount?: string;
+  paymentNote?: string;
+  paidOn?: Date;
+  /** Handed back when the customer pays more than the bill. */
+  changeReturn?: number;
 }
 
 const saleItemSchema = new Schema<ISaleItem>(
   {
     code: String,
     productName: String,
+    unit: String,
     qty: { type: Number, default: 0 },
     rate: { type: Number, default: 0 },
     netRate: { type: Number, default: 0 },
+    discType: { type: String, enum: ['fixed', 'percent'], default: 'fixed' },
+    discInput: { type: Number, default: 0 },
     discPercent: { type: Number, default: 0 },
     discAmt: { type: Number, default: 0 },
     grossAmt: { type: Number, default: 0 },
     taxPercent: { type: Number, default: 5 },
     taxAmt: { type: Number, default: 0 },
     netAmount: { type: Number, default: 0 },
+    warranty: { type: Number, default: 0 },
+    info: { type: String, trim: true },
   },
   { _id: false },
 );
@@ -75,6 +103,8 @@ const saleSchema = new Schema<ISale>(
     creditCardNo: String,
     jobCardRef: { type: String, trim: true },
     jobCardId: { type: Schema.Types.ObjectId, ref: 'JobCard' },
+    bookingNo: { type: String, trim: true },
+    refNo: { type: String, trim: true },
     salesman: { type: String, default: 'GENERAL' },
     partyName: { type: String, trim: true },
     phone: { type: String, trim: true },
@@ -88,12 +118,19 @@ const saleSchema = new Schema<ISale>(
     grossAmount: { type: Number, default: 0 },
     discountAmt: { type: Number, default: 0 },
     additionalDiscount: { type: Number, default: 0 },
+    discountType: { type: String, enum: ['percent', 'fixed'], default: 'percent' },
+    discountInput: { type: Number, default: 0 },
     taxAmt: { type: Number, default: 0 },
     freight: { type: Number, default: 0 },
     advanceAmount: { type: Number, default: 0 },
     netAmount: { type: Number, default: 0 },
     balance: { type: Number, default: 0 },
     isReturn: { type: Boolean, default: false },
+    paymentMethod: { type: String, trim: true, default: 'cash' },
+    paymentAccount: { type: String, trim: true },
+    paymentNote: { type: String, trim: true },
+    paidOn: { type: Date },
+    changeReturn: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

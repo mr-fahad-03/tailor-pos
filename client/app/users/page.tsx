@@ -195,7 +195,7 @@ export default function UsersPage() {
         </button>
       </div>
 
-      <div className="mt-6 max-w-sm">
+      <div className="mt-3 max-w-sm">
         <TextInput
           value={q}
           onChange={(e) => setQ(e.target.value)}

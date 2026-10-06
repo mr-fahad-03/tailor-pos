@@ -31,6 +31,9 @@ function JobCardsInner() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string[]>([]);
   const [converting, setConverting] = useState(false);
+  /** The search and status boxes are out of the way until asked for — but a
+      list already narrowed opens showing why. */
+  const [filterOpen, setFilterOpen] = useState(Boolean(initialQ));
 
   const load = useCallback(
     async (query: string, st: string) => {
@@ -96,42 +99,67 @@ function JobCardsInner() {
     }
   }
 
+  const filtered = q.trim().length > 0 || status !== '';
+
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <div>
           <h1 className="page-title">All Order</h1>
           <p className="page-sub">{total} records</p>
         </div>
-        {canManage && (
-          <Link href="/job-cards/new" className="btn-primary ml-auto">
-            ＋ New Order
-          </Link>
-        )}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <button
+            className={`btn-soft ${filterOpen || filtered ? '!border-brand-600 !text-brand-700' : ''}`}
+            onClick={() => setFilterOpen((o) => !o)}
+            aria-expanded={filterOpen}
+          >
+            Filter
+            {filtered && <span className="h-1.5 w-1.5 rounded-full bg-brand-600" aria-label="filter in force" />}
+          </button>
+          {canManage && (
+            <Link href="/job-cards/new" className="btn-primary">
+              ＋ New Order
+            </Link>
+          )}
+        </div>
       </div>
 
-      <Card className="mb-5 flex flex-wrap items-center gap-3 p-4">
-        <TextInput
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by no, ref, customer, phone…"
-          className="max-w-sm"
-        />
-        <Seg
-          options={[
-            { value: '', label: 'All' },
-            { value: 'draft', label: 'Draft' },
-            { value: 'open', label: 'Open' },
-            { value: 'closed', label: 'Closed' },
-            { value: 'converted', label: 'Converted' },
-          ]}
-          value={status}
-          onChange={setStatus}
-        />
-      </Card>
+      {filterOpen && (
+        <Card className="mb-3 flex flex-wrap items-center gap-3 p-4">
+          <TextInput
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search by no, ref, customer, phone…"
+            className="max-w-sm"
+            autoFocus
+          />
+          <Seg
+            options={[
+              { value: '', label: 'All' },
+              { value: 'open', label: 'Open' },
+              { value: 'closed', label: 'Closed' },
+              { value: 'converted', label: 'Converted' },
+            ]}
+            value={status}
+            onChange={setStatus}
+          />
+          {filtered && (
+            <button
+              className="btn-ghost !py-1.5 text-xs"
+              onClick={() => {
+                setQ('');
+                setStatus('');
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </Card>
+      )}
 
       {canConvert && selected.length > 0 && (
-        <Card className="mb-5 flex flex-wrap items-center gap-3 border-brand-200 bg-brand-50 p-4">
+        <Card className="mb-3 flex flex-wrap items-center gap-3 border-brand-200 bg-brand-50 p-4">
           <p className="text-sm font-bold text-brand-800">
             {selected.length} order{selected.length === 1 ? '' : 's'} selected
           </p>
@@ -237,17 +265,14 @@ function JobCardsInner() {
                       <div className="flex items-center justify-end gap-2">
                         {/* Printing is the common errand from this list, so it
                             is one press from here rather than a trip through
-                            the order. A draft has no number yet and nothing
-                            worth billing, so it gets no invoice. */}
-                        {j.status !== 'draft' && (
-                          <Link
-                            href={`/job-cards/${j._id}/invoice?print=1`}
-                            className="btn-soft !py-1 !px-2.5 text-[11px]"
-                            title={`Print the invoice for order ${orderNo(j)}`}
-                          >
-                            🖨 Invoice
-                          </Link>
-                        )}
+                            the order. */}
+                        <Link
+                          href={`/job-cards/${j._id}/invoice?print=1`}
+                          className="btn-soft !py-1 !px-2.5 text-[11px]"
+                          title={`Print the invoice for order ${orderNo(j)}`}
+                        >
+                          🖨 Invoice
+                        </Link>
                         {canConvert && j.status === 'open' && (
                           <button
                             className="btn-success !py-1 !px-2.5 text-[11px]"

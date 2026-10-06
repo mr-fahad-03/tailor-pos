@@ -103,7 +103,7 @@ export default function MeasurementsPage() {
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <div>
           <h1 className="page-title">Measurements</h1>
           <p className="page-sub">{total} people on file</p>
@@ -119,7 +119,7 @@ export default function MeasurementsPage() {
         </button>
       </div>
 
-      <Card className="mb-5 p-4">
+      <Card className="mb-3 p-4">
         <TextInput
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -129,7 +129,7 @@ export default function MeasurementsPage() {
       </Card>
 
       {shared.size > 0 && (
-        <Card className="mb-5 border-brass-200 bg-brass-50 p-4">
+        <Card className="mb-3 border-brass-200 bg-brass-50 p-4">
           <p className="text-sm font-bold text-brass-800">
             {shared.size} name{shared.size === 1 ? ' is' : 's are'} used by more than one customer
           </p>

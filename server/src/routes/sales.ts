@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { Sale } from '../models/Sale';
 import { nextSeq, peekSeq } from '../models/Counter';
 import { asyncHandler, HttpError } from '../middleware';
-import { num, r2, saleLine } from '../utils/money';
+import { num, r2 } from '../utils/money';
 import { requireAuth, requirePerm } from '../auth/guard';
 
 export const saleRouter = Router();
@@ -28,10 +28,16 @@ function searchFilter(q?: string) {
 interface SaleItemBody {
   code?: string;
   productName?: string;
+  unit?: string;
   qty?: number;
   rate?: number;
+  /** Either a flat sum off the line or a rate; 'fixed' when unsaid. */
+  discType?: 'fixed' | 'percent';
+  discInput?: number;
   discPercent?: number;
   taxPercent?: number;
+  warranty?: number;
+  info?: string;
 }
 
 interface SaleBody {
@@ -51,11 +57,19 @@ interface SaleBody {
   trn?: string;
   vehicleNo?: string;
   items?: SaleItemBody[];
+  bookingNo?: string;
+  refNo?: string;
   additionalDiscount?: number;
+  discountType?: 'percent' | 'fixed';
+  discountInput?: number;
   freight?: number;
   advanceAmount?: number;
   isReturn?: boolean;
   defaultTaxPercent?: number;
+  paymentMethod?: string;
+  paymentAccount?: string;
+  paymentNote?: string;
+  paidOn?: string;
 }
 
 // GET /sales?q=&isReturn=&page=&limit=
@@ -94,41 +108,73 @@ saleRouter.post(
     const body = (req.body ?? {}) as SaleBody;
     const defaultTax = body.defaultTaxPercent !== undefined ? num(body.defaultTaxPercent, DEFAULT_TAX_RATE) : DEFAULT_TAX_RATE;
 
-    const items = (body.items ?? [])
+    const taxPercent = defaultTax;
+
+    // A line's discount is whichever way the counter typed it — so many dirhams
+    // off, or so many percent — reduced to a rate so the stored line reads the
+    // same whichever was used.
+    const base = (body.items ?? [])
       .filter((i) => i && (i.code || i.productName || num(i.qty) || num(i.rate)))
       .map((i) => {
-        const computed = saleLine({
-          qty: num(i.qty),
-          rate: num(i.rate),
-          discPercent: num(i.discPercent),
-          taxPercent: i.taxPercent !== undefined ? num(i.taxPercent) : defaultTax,
-        });
+        const qty = num(i.qty);
+        const rate = num(i.rate);
+        const gross = r2(qty * rate);
+        const input = num(i.discInput, num(i.discPercent));
+        const discAmt =
+          i.discType === 'percent' ? r2((gross * input) / 100) : r2(Math.min(input, gross));
+        const grossAmt = r2(gross - discAmt);
         return {
           code: i.code || '',
           productName: i.productName || '',
-          qty: num(i.qty),
-          rate: num(i.rate),
-          netRate: computed.netRate,
-          discPercent: num(i.discPercent),
-          discAmt: computed.discAmt,
-          grossAmt: computed.grossAmt,
-          taxPercent: i.taxPercent !== undefined ? num(i.taxPercent) : defaultTax,
-          taxAmt: computed.taxAmt,
-          netAmount: computed.netAmount,
+          unit: i.unit || '',
+          qty,
+          rate,
+          discType: i.discType === 'percent' ? ('percent' as const) : ('fixed' as const),
+          discInput: input,
+          discPercent: gross ? r2((discAmt / gross) * 100) : 0,
+          discAmt,
+          grossAmt,
+          warranty: num(i.warranty),
+          info: (i.info ?? '').trim(),
         };
       });
 
-    if (items.length === 0) throw new HttpError(400, 'At least one item is required');
+    if (base.length === 0) throw new HttpError(400, 'At least one item is required');
 
-    const totQty = r2(items.reduce((s, i) => s + i.qty, 0));
-    const grossAmount = r2(items.reduce((s, i) => s + i.grossAmt, 0));
-    const lineDisc = r2(items.reduce((s, i) => s + i.discAmt, 0));
-    const additionalDiscount = r2(num(body.additionalDiscount));
+    const totQty = r2(base.reduce((s, i) => s + i.qty, 0));
+    const grossAmount = r2(base.reduce((s, i) => s + i.grossAmt, 0));
+    const lineDisc = r2(base.reduce((s, i) => s + i.discAmt, 0));
+
+    // The bill-wide discount comes off before tax, so tax is charged on what
+    // the customer actually owes.
+    const discountInput = r2(num(body.discountInput, num(body.additionalDiscount)));
+    const additionalDiscount =
+      body.discountType === 'fixed' || body.discountType === undefined
+        ? r2(Math.min(discountInput, grossAmount))
+        : r2((grossAmount * discountInput) / 100);
     const discountAmt = r2(lineDisc + additionalDiscount);
-    const taxAmt = r2(items.reduce((s, i) => s + i.taxAmt, 0));
+    const taxable = Math.max(r2(grossAmount - additionalDiscount), 0);
+    const taxAmt = r2((taxable * taxPercent) / 100);
     const freight = r2(num(body.freight));
-    const netAmount = r2(grossAmount - additionalDiscount + taxAmt + freight);
+    const netAmount = r2(taxable + taxAmt + freight);
     const advanceAmount = r2(num(body.advanceAmount));
+
+    // Share the bill-wide discount across the lines in proportion to what each
+    // contributed, so the line tax figures add up to the tax on the bill
+    // instead of being a penny out from it.
+    const keep = grossAmount > 0 ? taxable / grossAmount : 0;
+    const items = base.map((i) => {
+      const lineTaxable = r2(i.grossAmt * keep);
+      const lineTax = r2((lineTaxable * taxPercent) / 100);
+      const netAmount = r2(i.grossAmt + lineTax);
+      return {
+        ...i,
+        netRate: i.qty ? r2(netAmount / i.qty) : 0,
+        taxPercent,
+        taxAmt: lineTax,
+        netAmount,
+      };
+    });
 
     const billNo = await nextSeq('sale');
     const sale = await Sale.create({
@@ -148,17 +194,27 @@ saleRouter.post(
       landmark: body.landmark,
       trn: body.trn,
       vehicleNo: body.vehicleNo,
+      bookingNo: body.bookingNo?.trim() || body.jobCardRef?.trim(),
+      refNo: body.refNo?.trim() || `B-${billNo}`,
       items,
       totQty,
       grossAmount,
       discountAmt,
       additionalDiscount,
+      discountType: body.discountType === 'fixed' ? 'fixed' : 'percent',
+      discountInput,
       taxAmt,
       freight,
       advanceAmount,
       netAmount,
-      balance: r2(netAmount - advanceAmount),
+      // Overpaying hands change back rather than leaving the bill in credit.
+      balance: r2(Math.max(netAmount - advanceAmount, 0)),
+      changeReturn: r2(Math.max(advanceAmount - netAmount, 0)),
       isReturn: !!body.isReturn,
+      paymentMethod: body.paymentMethod || body.paymentType || 'cash',
+      paymentAccount: body.paymentAccount?.trim(),
+      paymentNote: body.paymentNote?.trim(),
+      paidOn: body.paidOn ? new Date(body.paidOn) : new Date(),
     });
     res.status(201).json(sale);
   }),

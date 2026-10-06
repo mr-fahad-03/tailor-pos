@@ -109,7 +109,7 @@ export default function LedgersPage() {
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <div>
           <h1 className="page-title">Ledgers</h1>
           <p className="page-sub">{total} customers, suppliers & accounts</p>
@@ -126,7 +126,7 @@ export default function LedgersPage() {
         )}
       </div>
 
-      <Card className="mb-5 p-4">
+      <Card className="mb-3 p-4">
         <TextInput
           value={q}
           onChange={(e) => setQ(e.target.value)}

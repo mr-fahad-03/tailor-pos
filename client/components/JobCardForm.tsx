@@ -40,6 +40,7 @@ import {
 } from './SplitTender';
 import { ProductSearchInput } from './ProductSearchInput';
 import { AttachSizePicker } from './AttachSizePicker';
+import { useLeaveGuard } from './LeaveGuard';
 import { Icon } from '@/components/icons';
 
 interface ItemRow {
@@ -122,8 +123,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
   // ---- header ----
   const [no, setNo] = useState<number | null>(initial?.no ?? null);
-  /** A draft's own number, shown until it is promoted and takes a real one. */
-  const [draftNo, setDraftNo] = useState<number | null>(initial?.draftNo ?? null);
   const [bookNo, setBookNo] = useState(String(initial?.bookNo ?? settings.bookNo));
   const [ref, setRef] = useState(initial?.ref ?? '');
   const [date, setDate] = useState(toISODate(initial?.date) || todayISO());
@@ -138,8 +137,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   const [invoiceNo, setInvoiceNo] = useState(initial?.invoiceNo ?? '');
 
   // ---- grids ----
-  // People first, so the opening order line can be attached to the person it
-  // is obviously for.
   // One block per person. Old cards carry a single unnamed set, so lift that
   // into the new shape on open rather than losing it.
   const [sets, setSets] = useState<EditableSet[]>(() => {
@@ -158,7 +155,10 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
           rate: String(i.rate ?? ''),
           personUid: i.personUid ?? '',
         }))
-      : [emptyItem(sets[0]?.uid ?? '')],
+      // Unattached until somebody says who it is being stitched for. Guessing
+      // the first person is right often enough to be trusted and wrong often
+      // enough to cut a garment to the wrong size.
+      : [emptyItem()],
   );
   const [discount, setDiscount] = useState(String(initial?.discount ?? '0'));
   const [additionalCharges, setAdditionalCharges] = useState(
@@ -194,7 +194,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   // ---- ui ----
   const [saving, setSaving] = useState(false);
   const [filing, setFiling] = useState(false);
-  /** True once this form has been saved properly — stops a duplicate draft. */
+  /** True once this form has been saved properly. */
   const settled = useRef(false);
   // Only ever opened to add somebody: an existing customer is found by typing
   // into the name box itself.
@@ -288,7 +288,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
   function loadDoc(d: JobCard) {
     setNo(d.no ?? null);
-    setDraftNo(d.draftNo ?? null);
     setBookNo(String(d.bookNo));
     setRef(d.ref);
     setDate(toISODate(d.date) || todayISO());
@@ -356,6 +355,9 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       measurementSets: sets.map((m) => ({
         uid: m.uid,
         profileId: m.profileId,
+        // The server files everyone named here against the customer; this says
+        // who to leave off, for a one-off nobody wants on the books.
+        remember: m.remember !== false,
         name: m.name.trim(),
         age: m.age ?? null,
         fabric: m.fabric,
@@ -379,32 +381,6 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       bank,
       creditCardNo,
     };
-  }
-
-  /**
-   * File each ticked person under the customer so the next order can just
-   * tick them again. Never block the order on this — the card is already
-   * saved by the time we get here.
-   */
-  async function rememberPeople() {
-    if (!ledgerId) return;
-    const keep = sets.filter((m) => m.remember !== false && m.name.trim());
-    if (keep.length === 0) return;
-    try {
-      await Promise.all(
-        keep.map((m) =>
-          api.measurements.save({
-            ledgerId,
-            name: m.name.trim(),
-            fabric: m.fabric,
-            size: m.size,
-            values: m.values,
-          }),
-        ),
-      );
-    } catch {
-      toast('Order saved, but the measurements could not be kept on file', 'error');
-    }
   }
 
   /**
@@ -476,15 +452,10 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       if (mode === 'new') {
         doc = await api.jobCards.create(payload());
       } else if (docId) {
-        // Saving a draft in full is what promotes it to a real order.
-        doc = await api.jobCards.update(docId, {
-          ...payload(),
-          ...(status === 'draft' ? { status: 'open' } : {}),
-        });
+        doc = await api.jobCards.update(docId, payload());
       }
       if (!doc) return;
       settled.current = true;
-      await rememberPeople();
 
       // Anything counted on the tender pad is taken with the order. That is
       // the whole point of letting it be counted before the order exists:
@@ -492,12 +463,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       // on the invoice as paid rather than print a sheet saying it is owed.
       const taken = await bookSplit(doc._id, doc.balance, false);
 
-      const what =
-        mode === 'new'
-          ? `Order ${doc.no} saved`
-          : status === 'draft'
-            ? `Draft saved to orders as ${doc.no}`
-            : `Order ${doc.no} updated`;
+      const what = mode === 'new' ? `Order ${doc.no} saved` : `Order ${doc.no} updated`;
       toast(taken > 0 ? `${what} · ${fmt(taken)} AED taken` : what);
 
       // Saved and done with: the form hands over to the invoice or back to
@@ -511,10 +477,9 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   }
 
   /**
-   * Has anything actually been typed? An untouched form must not leave a
-   * draft behind just because someone opened New Order and changed their mind.
-   * The fields the form pre-fills on its own — number, ref, dates, book no —
-   * deliberately do not count.
+   * Has anything actually been typed? Opening New Order and changing your mind
+   * is not work worth warning about. The fields the form pre-fills on its own
+   * — number, ref, dates, book no — deliberately do not count.
    */
   function hasContent(): boolean {
     if (partyName.trim() || phone.trim()) return true;
@@ -533,50 +498,12 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   }
 
   /**
-   * Leaving a half-filled New Order keeps the work as a draft rather than
-   * throwing it away. Fires from the unmount cleanup, which covers the back
-   * button and every in-app navigation; `settled` stops it running after the
-   * order has already been saved properly.
+   * Work in a New Order that has not been saved is just gone once the page
+   * changes, so leaving is worth asking about. An order already on file is
+   * not covered — what is on screen there is still on file.
    */
-  async function saveDraft() {
-    if (mode !== 'new' || settled.current || !hasContent()) return;
-    settled.current = true;
-    try {
-      await api.jobCards.create({ ...payload(), status: 'draft' });
-    } catch {
-      /* Leaving the page is not the moment to argue about a failed save. */
-    }
-  }
-
-  /**
-   * The unmount cleanup below runs once, so it would otherwise close over the
-   * state as it was on first render — an empty form. Pointing a ref at the
-   * current saveDraft on every render keeps it looking at what was typed.
-   */
-  const draftRef = useRef(saveDraft);
-  draftRef.current = saveDraft;
-  const draftDirty = useRef(hasContent);
-  draftDirty.current = hasContent;
-
-  useEffect(() => {
-    // Covers the back button and every in-app navigation away from the form.
-    return () => {
-      void draftRef.current();
-    };
-  }, []);
-
-  useEffect(() => {
-    // A hard tab close cannot carry the auth header on a beacon, so the
-    // browser's own prompt is the honest option there.
-    const warn = (e: BeforeUnloadEvent) => {
-      if (mode !== 'new' || settled.current || !draftDirty.current()) return;
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
+  const unsaved = mode === 'new' && !settled.current && hasContent();
+  const leaveGuard = useLeaveGuard(unsaved && !saving);
 
   /**
    * What this customer has paid with before. Fetched when the customer
@@ -811,12 +738,29 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
    * carrying no size, rather than naming a person who is not there.
    */
   function changeSets(next: EditableSet[]) {
+    // Naming somebody is the moment it becomes clear who the work is for, so
+    // they take the first line still waiting for a name. Only a line nobody
+    // has claimed is taken, and only the keystroke that first gives a person a
+    // name does it — clearing and retyping never moves an attachment somebody
+    // has since set by hand.
+    const had = new Map(sets.map((p) => [p.uid, p.name.trim().length > 0]));
+    const justNamed = next
+      .filter((p) => p.name.trim() && !had.get(p.uid))
+      .map((p) => p.uid);
+
     setSets(next);
-    setItems((rows) =>
-      rows.map((r) =>
+    setItems((rows) => {
+      // A line pointing at somebody who has been deleted points at nobody.
+      const out = rows.map((r) =>
         !r.personUid || next.some((n) => n.uid === r.personUid) ? r : { ...r, personUid: '' },
-      ),
-    );
+      );
+      for (const uid of justNamed) {
+        const i = out.findIndex((r) => !r.personUid);
+        if (i === -1) break;
+        out[i] = { ...out[i], personUid: uid };
+      }
+      return out;
+    });
   }
 
   return (
@@ -842,33 +786,23 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         </div>
       )}
 
-      {status === 'draft' && (
-        <div className="mb-5 rounded-2xl border border-brass-200 bg-brass-50 px-5 py-3 text-sm font-semibold text-brass-800">
-          This is a draft — it was saved automatically when the form was left part-finished.
-          Fill in what is missing and press <strong>Save / Update Order</strong> to make it a
-          real order. It cannot be converted to a sale until then.
-        </div>
-      )}
-
       {readOnly && (
         <div className="mb-5 rounded-2xl border border-brand-200 bg-brand-50 px-5 py-3 text-sm font-semibold text-brand-800">
           This stitching order has been converted to sales{invoiceNo ? ` (Bill ${invoiceNo})` : ''} and is read-only.
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="space-y-6 xl:col-span-2">
+      <div className="grid grid-cols-1 xl:grid-cols-3">
+        <Card className="rounded-none border-x-0 border-t-0 xl:col-span-2 xl:border-r">
           {/* header fields */}
-          <Card className="p-5">
+          <section className="p-5">
             {/* The number the order is called, set over the form rather than
                 boxed in beside the fields: it is read out and quoted, never
                 typed into, so it reads as a title. */}
             <div className="mb-5 flex items-baseline justify-center gap-3">
-              <p className="text-lg font-extrabold tracking-tight text-ink-900">
-                {no == null && draftNo != null ? 'Draft NO:' : 'Order NO:'}
-              </p>
+              <p className="text-lg font-extrabold tracking-tight text-ink-900">Order NO:</p>
               <p className="text-3xl font-black leading-none tabular-nums text-ink-900">
-                {no ?? (draftNo != null ? draftNo : '…')}
+                {no ?? '…'}
               </p>
             </div>
 
@@ -881,6 +815,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   value={partyName}
                   onChange={(v) => { setPartyName(v); setLedgerId(''); }}
                   onPick={pickLedger}
+                  onCreate={canAddLedger ? () => setLedgerOpen(true) : undefined}
                   disabled={readOnly}
                   placeholder="Start typing a customer's name…"
                   className="font-semibold"
@@ -948,10 +883,10 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 <DateInput value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} disabled={readOnly} />
               </Field>
             </div>
-          </Card>
+          </section>
 
           {/* order items */}
-          <Card className="p-5">
+          <section className="border-t border-ink-200 p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-extrabold tracking-tight text-ink-900">Order Items</h2>
               {!readOnly && (
@@ -966,13 +901,13 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   <tr>
                     <th className="th w-10">Sl</th>
                     <th className="th">Product</th>
-                    <th className="th w-24 text-right">Qty</th>
-                    <th className="th w-28 text-right">Rate</th>
+                    <th className="th w-20 text-right">Qty</th>
+                    <th className="th w-24 text-right">Rate</th>
                     {/* Not shouted like the figures either side of it: this
                         column is a statement about the row, not a heading
                         over a number. */}
-                    <th className="th w-40 text-center normal-case tracking-normal">Attach Size</th>
-                    <th className="th w-28 text-right">Amount</th>
+                    <th className="th w-36 text-center normal-case tracking-normal">Attach Size</th>
+                    <th className="th w-24 text-right">Amount</th>
                     {!readOnly && <th className="th w-10" />}
                   </tr>
                 </thead>
@@ -1048,10 +983,10 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 </tbody>
               </table>
             </div>
-          </Card>
+          </section>
 
           {/* measurements — one block per person on this order */}
-          <Card className="p-5">
+          <section className="border-t border-ink-200 p-5">
             <MeasurementSets
               sets={sets}
               onChange={changeSets}
@@ -1126,12 +1061,12 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 </button>
               )}
             </div>
-          </Card>
-        </div>
+          </section>
+        </Card>
 
         {/* right payment panel */}
         <div>
-          <Card className="sticky top-20 max-h-[calc(100vh-5.5rem)] overflow-y-auto p-4">
+          <Card className="sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto rounded-none border-x-0 border-t-0 p-4">
             {/* The chain the counter reads out, in the order the money is
                 actually worked out: what the goods come to, what is added or
                 taken off, the tax on the result, then the one figure the
@@ -1275,6 +1210,27 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       </div>
 
       {/* modals */}
+      {/* Nothing on a New Order is on file until Save is pressed, so leaving
+          the page would throw the lot away without this. */}
+      <Modal
+        open={leaveGuard.asking}
+        onClose={leaveGuard.stay}
+        title="This order is not saved"
+      >
+        <p className="text-sm leading-relaxed text-ink-600">
+          Everything written on this order — the customer, the items and the
+          measurements — will be lost if you leave now.
+        </p>
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button className="btn-soft" onClick={leaveGuard.leave}>
+            Leave without saving
+          </button>
+          <button className="btn-primary" onClick={leaveGuard.stay} autoFocus>
+            Continue order
+          </button>
+        </div>
+      </Modal>
+
       <LedgerSearchModal
         open={ledgerOpen}
         onClose={() => setLedgerOpen(false)}

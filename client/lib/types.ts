@@ -188,13 +188,11 @@ export interface MeasurementProfile {
   ledgerType?: string;
 }
 
-export type JobCardStatus = 'draft' | 'open' | 'closed' | 'converted';
+export type JobCardStatus = 'open' | 'closed' | 'converted';
 
 export interface JobCard {
   _id: string;
-  /** Absent on a draft — a number is only taken when the order becomes real. */
   no?: number;
-  draftNo?: number;
   bookNo: number;
   ref: string;
   date: string;
@@ -233,15 +231,20 @@ export interface JobCard {
 export interface SaleItem {
   code?: string;
   productName?: string;
+  unit?: string;
   qty: number;
   rate: number;
   netRate: number;
+  discType?: 'fixed' | 'percent';
+  discInput?: number;
   discPercent: number;
   discAmt: number;
   grossAmt: number;
   taxPercent: number;
   taxAmt: number;
   netAmount: number;
+  warranty?: number;
+  info?: string;
 }
 
 export interface Sale {
@@ -254,6 +257,8 @@ export interface Sale {
   creditCardNo?: string;
   jobCardRef?: string;
   jobCardId?: string;
+  bookingNo?: string;
+  refNo?: string;
   salesman: string;
   partyName?: string;
   phone?: string;
@@ -267,12 +272,19 @@ export interface Sale {
   grossAmount: number;
   discountAmt: number;
   additionalDiscount: number;
+  discountType?: 'percent' | 'fixed';
+  discountInput?: number;
   taxAmt: number;
   freight: number;
   advanceAmount: number;
   netAmount: number;
   balance: number;
   isReturn: boolean;
+  paymentMethod?: string;
+  paymentAccount?: string;
+  paymentNote?: string;
+  paidOn?: string;
+  changeReturn?: number;
 }
 
 export interface Page<T> {

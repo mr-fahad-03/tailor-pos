@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { JobCard } from '../models/JobCard';
+import { MeasurementProfile } from '../models/MeasurementProfile';
 import { Sale } from '../models/Sale';
 import { nextSeq, peekSeq } from '../models/Counter';
 import { asyncHandler, HttpError } from '../middleware';
@@ -96,7 +97,6 @@ function searchFilter(q?: string) {
 }
 
 interface JobCardBody {
-  /** Only 'draft' or 'open' may be set from the form. */
   status?: string;
   additionalCharges?: number;
   bookNo?: number;
@@ -130,6 +130,8 @@ interface JobCardBody {
     size?: string;
     qty?: number;
     values?: Record<string, string>;
+    /** Unticked on the form for a one-off who should not be kept on file. */
+    remember?: boolean;
   }[];
   materialsUsed?: { code?: string; productName?: string; qty?: number; rate?: number }[];
   materialTotal?: number;
@@ -167,6 +169,41 @@ function buildComputed(body: JobCardBody) {
   return { items, totals, materialsUsed, materialTotal, taxRate };
 }
 
+/**
+ * Put everyone measured on this order on the customer's file.
+ *
+ * This belongs with the order rather than in a second call from the browser:
+ * the two must either both happen or neither, and a browser that has already
+ * moved on to the invoice cannot be relied on to make the second trip. The
+ * same name under the same customer is one person, so re-ordering updates
+ * their sizes instead of filing them twice.
+ */
+async function filePeople(
+  ledgerId: string | undefined,
+  sets: JobCardBody['measurementSets'],
+): Promise<void> {
+  if (!ledgerId || !Array.isArray(sets)) return;
+  const keep = sets.filter((m) => m?.remember !== false && String(m?.name ?? '').trim());
+  await Promise.all(
+    keep.map((m) => {
+      const name = String(m.name).trim();
+      const values: Record<string, string> = {};
+      for (const [k, v] of Object.entries(m.values ?? {})) {
+        const str = String(v ?? '').trim();
+        if (str) values[k] = str;
+      }
+      return MeasurementProfile.findOneAndUpdate(
+        { ledgerId, name },
+        {
+          $set: { values, archived: false, lastUsedAt: new Date() },
+          $setOnInsert: { ledgerId, name },
+        },
+        { upsert: true, runValidators: true },
+      );
+    }),
+  );
+}
+
 // GET /jobcards?q=&status=&page=&limit=
 jobCardRouter.get(
   '/',
@@ -176,9 +213,11 @@ jobCardRouter.get(
     const page = Math.max(num(req.query.page, 1), 1);
     const limit = Math.min(Math.max(num(req.query.limit, 30), 1), 200);
     const filter: Record<string, unknown> = { ...searchFilter(q) };
-    if (status) filter.status = status;
+    // Drafts are no longer a thing the form can make. Older ones are still on
+    // file, but they are not orders and have no business in this list.
+    filter.status = status && status !== 'draft' ? status : { $ne: 'draft' };
     const [items, total] = await Promise.all([
-      JobCard.find(filter).sort({ no: -1, draftNo: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      JobCard.find(filter).sort({ no: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       JobCard.countDocuments(filter),
     ]);
     res.json({ items, total, page, limit });
@@ -254,12 +293,9 @@ jobCardRouter.post(
   requirePerm('jobcards.create'),
   asyncHandler(async (req, res) => {
     const body = (req.body ?? {}) as JobCardBody;
-    const isDraft = body.status === 'draft';
-    // A draft must not burn an order number — the shop's sequence carries on
-    // from the old books and a gap in it is a real problem. Drafts are counted
-    // separately and only take a real number if they are ever finished.
-    const no = isDraft ? undefined : await nextSeq('jobcard');
-    const draftNo = isDraft ? await nextSeq('jobcard_draft') : undefined;
+    // Every order written here is a real order and takes the next number in
+    // the shop's sequence. Nothing is saved part-finished any more.
+    const no = await nextSeq('jobcard');
     const computed = buildComputed(body);
     const advance = r2(
       ((body as { advance?: number }).advance !== undefined
@@ -269,9 +305,8 @@ jobCardRouter.post(
     const advSplit = advanceSplit(advance, computed.taxRate);
     const jobCard = await JobCard.create({
       no,
-      draftNo,
       bookNo: num(body.bookNo, 270),
-      ref: isDraft ? `DRAFT-${draftNo}` : body.ref?.trim() || `${REF_PREFIX}-${no}`,
+      ref: body.ref?.trim() || `${REF_PREFIX}-${no}`,
       date: body.date ? new Date(body.date) : new Date(),
       deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : undefined,
       partyName: body.partyName?.trim(),
@@ -301,14 +336,13 @@ jobCardRouter.post(
       bank: body.bank,
       creditCardNo: body.creditCardNo,
       payments: [],
-      status: body.status === 'draft' ? 'draft' : 'open',
+      status: 'open',
     });
+    await filePeople(body.ledgerId, body.measurementSets);
     await recordAudit(req, {
       action: 'create',
       doc: jobCard,
-      summary: `${jobCard.status === 'draft' ? `Draft ${jobCard.draftNo}` : `Order ${jobCard.no}`} created for ${
-        jobCard.partyName || 'no customer'
-      }`,
+      summary: `Order ${jobCard.no} created for ${jobCard.partyName || 'no customer'}`,
     });
     res.status(201).json(jobCard);
   }),
@@ -339,14 +373,6 @@ jobCardRouter.put(
     // Taken before any field is touched — this is the 'from' side of the log.
     const before = snapshotJobCard(existing.toObject());
 
-    // Finishing a draft is the moment it earns a number, so the sequence only
-    // ever advances for orders that actually exist.
-    const promoting = existing.status === 'draft' && body.status === 'open';
-    if (promoting) {
-      existing.no = await nextSeq('jobcard');
-      existing.ref = body.ref?.trim() || `${REF_PREFIX}-${existing.no}`;
-    }
-
     const computed = buildComputed(body);
     const paymentsTotal = r2(
       existing.payments.reduce((s: number, p: any) => s + num(p.amount), 0),
@@ -358,7 +384,7 @@ jobCardRouter.put(
 
     existing.set({
       bookNo: body.bookNo !== undefined ? num(body.bookNo, 270) : existing.bookNo,
-      ref: promoting ? existing.ref : body.ref?.trim() || existing.ref,
+      ref: body.ref?.trim() || existing.ref,
       date: body.date ? new Date(body.date) : existing.date,
       deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : existing.deliveryDate,
       partyName: body.partyName?.trim() ?? existing.partyName,
@@ -387,12 +413,12 @@ jobCardRouter.put(
       paymentMode: body.paymentMode || existing.paymentMode,
       bank: body.bank ?? existing.bank,
       creditCardNo: body.creditCardNo ?? existing.creditCardNo,
-      // Finishing a draft is what turns it into a real order. Nothing else may
-      // move the status from here — closing and converting have their own routes.
-      status:
-        existing.status === 'draft' && body.status === 'open' ? 'open' : existing.status,
+      // The status is not the form's to move — closing and converting have
+      // their own routes.
+      status: existing.status,
     });
     await existing.save();
+    await filePeople(String(existing.ledgerId ?? ''), body.measurementSets);
     await recordAudit(req, {
       action: 'update',
       doc: existing,

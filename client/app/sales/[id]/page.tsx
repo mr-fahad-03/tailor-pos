@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { fmt, fmtDate } from '@/lib/format';
 import type { Sale } from '@/lib/types';
@@ -13,6 +14,8 @@ export default function SaleDetailPage({ params }: { params: { id: string } }) {
   const { toast } = useToast();
   const [sale, setSale] = useState<Sale | null>(null);
   const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
+  const autoPrint = searchParams?.get('print') === '1';
 
   useEffect(() => {
     (async () => {
@@ -27,12 +30,20 @@ export default function SaleDetailPage({ params }: { params: { id: string } }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
+  // Arrived here from Save and print: raise the dialog once the bill is on
+  // screen, so what prints is the bill rather than an empty page.
+  useEffect(() => {
+    if (!autoPrint || loading || !sale) return;
+    const t = setTimeout(() => window.print(), 300);
+    return () => clearTimeout(t);
+  }, [autoPrint, loading, sale]);
+
   if (loading) return <div className="h-96 animate-pulse rounded-2xl bg-ink-200" />;
   if (!sale) return <EmptyState title="Bill not found" sub="It may have been deleted." />;
 
   return (
     <div>
-      <div className="no-print mb-5 flex items-center gap-3">
+      <div className="no-print mb-3 flex items-center gap-3">
         <Link href="/sales" className="btn-soft">
           ← All bills
         </Link>

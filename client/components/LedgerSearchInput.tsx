@@ -17,6 +17,7 @@ export function LedgerSearchInput({
   value,
   onChange,
   onPick,
+  onCreate,
   placeholder = 'Search customers…',
   disabled,
   autoFocus,
@@ -25,6 +26,8 @@ export function LedgerSearchInput({
   value: string;
   onChange: (v: string) => void;
   onPick: (l: Ledger) => void;
+  /** Offered at the foot of the list when the typed name is on nobody's file. */
+  onCreate?: (name: string) => void;
   placeholder?: string;
   disabled?: boolean;
   autoFocus?: boolean;
@@ -32,8 +35,14 @@ export function LedgerSearchInput({
 }) {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<Ledger[]>([]);
+  /** The text the rows above were fetched for, so a stale list is never
+      mistaken for "nobody by that name". */
+  const [answered, setAnswered] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  const typed = value.trim();
+  const empty = open && answered === typed && typed.length > 0 && rows.length === 0;
 
   useEffect(() => {
     const fn = (e: MouseEvent) => {
@@ -47,16 +56,30 @@ export function LedgerSearchInput({
 
   useEffect(() => {
     if (!open || disabled) return;
+    let dropped = false;
     const t = setTimeout(async () => {
+      const asked = value.trim();
       try {
         const r = await api.ledgers.list(value, 1, 8);
+        if (dropped) return;
         setRows(r.items);
+        setAnswered(asked);
       } catch {
+        if (dropped) return;
         setRows([]);
+        setAnswered(asked);
       }
     }, 250);
-    return () => clearTimeout(t);
+    return () => {
+      dropped = true;
+      clearTimeout(t);
+    };
   }, [value, open, disabled]);
+
+  function create() {
+    setOpen(false);
+    onCreate?.(typed);
+  }
 
   return (
     <div ref={wrapRef} className="relative w-full min-w-0">
@@ -72,15 +95,24 @@ export function LedgerSearchInput({
           setOpen(e.target.value.trim().length > 0);
         }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && rows.length > 0) {
+          if (e.key !== 'Enter') return;
+          if (rows.length > 0) {
             e.preventDefault();
             onPick(rows[0]);
             setOpen(false);
+          } else if (empty && onCreate) {
+            e.preventDefault();
+            create();
           }
         }}
         className={`input ${className}`}
       />
-      <AnchoredDropdown anchorRef={wrapRef} panelRef={panelRef} open={open && rows.length > 0} width={320}>
+      <AnchoredDropdown
+        anchorRef={wrapRef}
+        panelRef={panelRef}
+        open={open && (rows.length > 0 || empty)}
+        width={320}
+      >
         <>
           {rows.map((l) => (
             <button
@@ -96,9 +128,28 @@ export function LedgerSearchInput({
               <span className="font-mono text-xs text-ink-500">{l.phone || '—'}</span>
             </button>
           ))}
-          <p className="border-t border-ink-100 px-3 py-1.5 text-[10px] text-ink-400">
-            Enter to pick first match
-          </p>
+          {/* A name nobody is filed under is usually a new walk-in, not a typo,
+              so the way to put them on file is offered right where the search
+              failed instead of sending the counter off to find a ＋ button. */}
+          {empty && (
+            <div className="px-3 py-2">
+              <p className="text-[13px] font-semibold text-ink-500">No customer found</p>
+              {onCreate && (
+                <button
+                  type="button"
+                  onClick={create}
+                  className="mt-1.5 w-full rounded-lg bg-brand-700 px-3 py-1.5 text-[13px] font-bold text-white transition hover:bg-brand-800"
+                >
+                  ＋ Add &ldquo;{typed}&rdquo; as a new customer
+                </button>
+              )}
+            </div>
+          )}
+          {rows.length > 0 && (
+            <p className="border-t border-ink-100 px-3 py-1.5 text-[10px] text-ink-400">
+              Enter to pick first match
+            </p>
+          )}
         </>
       </AnchoredDropdown>
     </div>

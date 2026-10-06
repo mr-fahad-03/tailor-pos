@@ -7,7 +7,6 @@ import { useAuth } from '@/components/AuthContext';
 import { useToast } from '@/components/Toast';
 import { Modal } from '@/components/Modal';
 import { api } from '@/lib/api';
-import { Icon } from '@/components/icons';
 
 const ROLE_TONE: Record<string, string> = {
   super_admin: 'bg-brand-100 text-brand-800',
@@ -99,8 +98,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
 
 export function Topbar({ onMenu }: { onMenu: () => void }) {
   const router = useRouter();
-  const { user, logout, can } = useAuth();
-  const [q, setQ] = useState('');
+  const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -122,8 +120,6 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
     };
   }, [open]);
 
-  const canSearch = can('jobcards.view');
-
   return (
     <header className="no-print sticky top-0 z-40 border-b border-ink-200 bg-white/90 backdrop-blur">
       <div className="flex items-center gap-2 px-4 py-2.5 sm:gap-4 sm:px-6 sm:py-3">
@@ -137,25 +133,6 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
             <path d="M3 6h18M3 12h18M3 18h18" />
           </svg>
         </button>
-        {canSearch ? (
-          <div className="relative min-w-0 flex-1 sm:max-w-md">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400">
-              <Icon name="search" className="h-[17px] w-[17px]" />
-            </span>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') router.push(`/job-cards?q=${encodeURIComponent(q)}`);
-              }}
-              placeholder="Search stitching orders, bills, customers… (Enter)"
-              className="input !rounded-lg !bg-ink-50 pl-10 focus:!bg-white"
-            />
-          </div>
-        ) : (
-          <div />
-        )}
-
         <div className="ml-auto flex shrink-0 items-center gap-3 sm:gap-4">
           <span className="hidden text-sm font-medium text-ink-500 md:block">
             {fmtDate(todayISO())}

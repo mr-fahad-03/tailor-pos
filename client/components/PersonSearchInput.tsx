@@ -35,8 +35,15 @@ export function PersonSearchInput({
 }) {
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<MeasurementProfile[]>([]);
+  /** What the rows above were fetched for, so a list that has not caught up
+      is never mistaken for "nobody on file". */
+  const [answered, setAnswered] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  const term = value.trim();
+  const asked = `${ledgerId ?? ''}|${term}`;
+  const empty = open && !disabled && answered === asked && results.length === 0;
 
   useEffect(() => {
     const fn = (e: MouseEvent) => {
@@ -50,7 +57,6 @@ export function PersonSearchInput({
 
   useEffect(() => {
     if (!open || disabled) return;
-    const term = value.trim();
     // An empty box on an order that already names a customer shows that
     // customer's own people straight away — their measurements are what the
     // counter wants nine times out of ten, and nobody should have to guess at
@@ -58,23 +64,32 @@ export function PersonSearchInput({
     // is nothing to narrow by, so wait for something to be typed.
     if (!term && !ledgerId) {
       setResults([]);
+      setAnswered(null);
       return;
     }
+    let dropped = false;
     const t = setTimeout(async () => {
       try {
         const r = term
           ? await api.measurements.search(term, 1, 10)
           : await api.measurements.list(ledgerId!);
+        if (dropped) return;
         // This order's own customer first; everyone else after.
         const mine = r.items.filter((p) => ledgerId && p.ledgerId === ledgerId);
         const others = r.items.filter((p) => !ledgerId || p.ledgerId !== ledgerId);
         setResults([...mine, ...others]);
       } catch {
+        if (dropped) return;
         setResults([]);
+      } finally {
+        if (!dropped) setAnswered(asked);
       }
     }, 250);
-    return () => clearTimeout(t);
-  }, [value, open, disabled, ledgerId]);
+    return () => {
+      dropped = true;
+      clearTimeout(t);
+    };
+  }, [value, open, disabled, ledgerId, term, asked]);
 
   return (
     <div ref={wrapRef} className="relative min-w-0 flex-1">
@@ -90,7 +105,12 @@ export function PersonSearchInput({
         onFocus={() => setOpen(true)}
         className={className}
       />
-      <AnchoredDropdown anchorRef={wrapRef} panelRef={panelRef} open={open && results.length > 0} width={352}>
+      <AnchoredDropdown
+        anchorRef={wrapRef}
+        panelRef={panelRef}
+        open={open && (results.length > 0 || empty)}
+        width={352}
+      >
         <>
           {results.map((p) => {
             const sameCustomer = Boolean(ledgerId) && p.ledgerId === ledgerId;
@@ -125,9 +145,24 @@ export function PersonSearchInput({
               </button>
             );
           })}
-          <p className="border-t border-ink-100 px-3 py-1.5 text-[10px] text-ink-400">
-            Picking copies their measurements onto this order
-          </p>
+          {/* A box that simply stays blank reads as broken. It is usually
+              just a person nobody has measured here yet, so it says so. */}
+          {empty && (
+            <div className="px-3 py-2.5">
+              <p className="text-[13px] font-semibold text-ink-600">
+                {term ? 'Nobody saved by that name' : 'Nobody saved for this customer yet'}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-ink-500">
+                Fill the boxes below and they are kept on file when the order is
+                saved, ready to pick next time.
+              </p>
+            </div>
+          )}
+          {results.length > 0 && (
+            <p className="border-t border-ink-100 px-3 py-1.5 text-[10px] text-ink-400">
+              Picking copies their measurements onto this order
+            </p>
+          )}
         </>
       </AnchoredDropdown>
     </div>

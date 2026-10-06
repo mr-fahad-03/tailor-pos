@@ -37,13 +37,13 @@ export default function PaymentsPage() {
       <h1 className="page-title">Payments</h1>
       <p className="page-sub">Advances and part payments collected against stitching orders.</p>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard title="Total Collected" value={`${fmt(total)} AED`} sub={`${rows.length} payments`} icon="coins" tone="brand" />
         <StatCard title="Cash" value={`${fmt(cash)} AED`} icon="banknote" tone="ink" />
         <StatCard title="Card" value={`${fmt(card)} AED`} icon="card" tone="brass" />
       </div>
 
-      <Card className="mt-6 overflow-hidden">
+      <Card className="mt-3 overflow-hidden">
         {loading ? (
           <div className="space-y-2 p-5">
             {[0, 1, 2, 3, 4].map((i) => (
