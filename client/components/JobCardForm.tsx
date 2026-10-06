@@ -609,35 +609,12 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         <div className="space-y-6 xl:col-span-2">
           {/* header fields */}
           <Card className="p-5">
-            {/* which order this is */}
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-              <Field label={no == null && draftNo != null ? 'Draft No' : 'Invoice No'}>
-                <TextInput
-                  value={no ?? (draftNo != null ? `DRAFT-${draftNo}` : '…')}
-                  readOnly
-                  className="bg-ink-50 font-bold text-brand-700"
-                />
-              </Field>
-              <Field label="Book No">
-                <NumberInput value={bookNo} onChange={(e) => setBookNo(e.target.value)} disabled={readOnly} />
-              </Field>
-              <Field label="Ref">
-                <TextInput value={ref} onChange={(e) => setRef(e.target.value)} disabled={readOnly} className="font-mono" />
-              </Field>
-              <Field label="&nbsp;">
-                <button className="btn-soft w-full" onClick={() => { setFindOpen(true); setFindQ(''); setFindRows([]); }}>
-                  Find
-                </button>
-              </Field>
-              <Field label="Date">
-                <DateInput value={date} onChange={(e) => setDate(e.target.value)} disabled={readOnly} />
-              </Field>
-            </div>
-            {/* who it is for, and when it is due */}
-            {/* The customer needs the room: a name, a lookup and an add button.
-                Phone and delivery date are short values, so they give it up. */}
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-12">
-              <Field label="Party A/c (Customer)" className="md:col-span-6">
+            {/* One 12-column grid whose spans fill exactly two rows, in the
+                order the counter works: who the order is for, then what it is
+                numbered. The "New customer" slot is always rendered, empty if
+                the user may not add ledgers, so the spans never reshuffle. */}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-12">
+              <Field label="Party A/c (Customer)" className="col-span-2 sm:col-span-5">
                 <div className="flex gap-2">
                   <TextInput
                     value={partyName}
@@ -649,22 +626,45 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   <button className="btn-soft shrink-0" onClick={() => { setLedgerMode('search'); setLedgerOpen(true); }} disabled={readOnly} title="Find ledger (F2)" aria-label="Find ledger">
                     <Icon name="search" className="h-[17px] w-[17px]" />
                   </button>
-                  {canAddLedger && (
-                    <button
-                      className="btn-soft shrink-0 whitespace-nowrap !px-2.5 !py-1.5 text-xs"
-                      onClick={() => { setLedgerMode('newCustomer'); setLedgerOpen(true); }}
-                      disabled={readOnly}
-                      title="Add a customer to the ledger and put them on this order"
-                    >
-                      ＋ New customer
-                    </button>
-                  )}
                 </div>
               </Field>
-              <Field label="Phone" className="md:col-span-3">
+              <Field label="Phone" className="sm:col-span-2">
                 <TextInput value={phone} onChange={(e) => setPhone(e.target.value)} disabled={readOnly} className="font-mono" />
               </Field>
-              <Field label="Delivery Date" className="md:col-span-3">
+              <Field label="&nbsp;" className="sm:col-span-3">
+                {canAddLedger && (
+                  <button
+                    className="btn-soft w-full whitespace-nowrap"
+                    onClick={() => { setLedgerMode('newCustomer'); setLedgerOpen(true); }}
+                    disabled={readOnly}
+                    title="Add a customer to the ledger and put them on this order"
+                  >
+                    ＋ New customer
+                  </button>
+                )}
+              </Field>
+              <Field label={no == null && draftNo != null ? 'Draft No' : 'Invoice No'} className="sm:col-span-2">
+                <TextInput
+                  value={no ?? (draftNo != null ? `DRAFT-${draftNo}` : '…')}
+                  readOnly
+                  className="bg-ink-50 font-bold text-brand-700"
+                />
+              </Field>
+              <Field label="Book No" className="sm:col-span-2">
+                <NumberInput value={bookNo} onChange={(e) => setBookNo(e.target.value)} disabled={readOnly} />
+              </Field>
+              <Field label="Ref" className="sm:col-span-4">
+                <div className="flex gap-2">
+                  <TextInput value={ref} onChange={(e) => setRef(e.target.value)} disabled={readOnly} className="font-mono" />
+                  <button className="btn-soft shrink-0" onClick={() => { setFindOpen(true); setFindQ(''); setFindRows([]); }}>
+                    Find
+                  </button>
+                </div>
+              </Field>
+              <Field label="Date" className="sm:col-span-3">
+                <DateInput value={date} onChange={(e) => setDate(e.target.value)} disabled={readOnly} />
+              </Field>
+              <Field label="Delivery Date" className="sm:col-span-3">
                 <DateInput value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} disabled={readOnly} />
               </Field>
             </div>
