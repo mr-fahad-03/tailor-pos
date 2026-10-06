@@ -349,7 +349,7 @@ export function SaleForm() {
                   onClick={() => setLedgerOpen(true)}
                   title="Add a customer"
                   aria-label="Add a customer"
-                  className="flex h-[32px] w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white transition hover:bg-sky-700"
+                  className="flex h-[32px] w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white transition hover:bg-brand-700"
                 >
                   <Icon name="plus" className="h-4 w-4" />
                 </button>
@@ -485,7 +485,7 @@ export function SaleForm() {
                       <button
                         onClick={() => step(i, 1)}
                         aria-label="One more"
-                        className="flex w-7 items-center justify-center rounded-r-lg border border-l-0 border-ink-300 bg-white text-base font-bold text-emerald-600 transition hover:bg-emerald-50"
+                        className="flex w-7 items-center justify-center rounded-r-lg border border-l-0 border-ink-300 bg-white text-base font-bold text-brand-600 transition hover:bg-brand-50"
                       >
                         +
                       </button>
@@ -560,7 +560,7 @@ export function SaleForm() {
                           setInfoRow(i);
                           setInfoDraft(r.info);
                         }}
-                        className="flex shrink-0 items-center gap-1 rounded-lg bg-sky-600 px-2 text-[11px] font-bold text-white transition hover:bg-sky-700"
+                        className="flex shrink-0 items-center gap-1 rounded-lg bg-brand-600 px-2 text-[11px] font-bold text-white transition hover:bg-brand-700"
                       >
                         <Icon name="plus" className="h-3 w-3" />
                         Add
@@ -766,14 +766,14 @@ export function SaleForm() {
       {/* --------------------------------------------------------- actions */}
       <div className="mt-6 flex items-center justify-center gap-3 border-t border-ink-200 bg-ink-50 py-4">
         <button
-          className="rounded-md bg-emerald-600 px-8 py-2.5 text-[14px] font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md bg-brand-600 px-8 py-2.5 text-[14px] font-bold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => void save(false)}
           disabled={saving || !canCreate}
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
         <button
-          className="rounded-md bg-emerald-600 px-8 py-2.5 text-[14px] font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md bg-brand-600 px-8 py-2.5 text-[14px] font-bold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => void save(true)}
           disabled={saving || !canCreate}
         >
