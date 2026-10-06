@@ -69,7 +69,7 @@ export function AnchoredDropdown({
     <div
       ref={ref}
       style={{ position: 'fixed', top: box.top, left: box.left, width: box.width }}
-      className="z-[60] max-h-[min(20rem,60vh)] overflow-y-auto overflow-x-hidden rounded-xl border border-ink-200 bg-white shadow-pop"
+      className="z-[120] max-h-[min(20rem,60vh)] overflow-y-auto overflow-x-hidden rounded-xl border border-ink-200 bg-white shadow-pop"
     >
       {children}
     </div>,

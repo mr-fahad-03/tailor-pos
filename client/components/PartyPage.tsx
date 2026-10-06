@@ -27,6 +27,9 @@ export interface PartyConfig {
 
 const blank = { name: '', phone: '', address: '', trn: '', openingBalance: '0' };
 
+/** Mirrors the server's cap, so the form stops you before the request does. */
+const NAME_MAX = 120;
+
 /**
  * One screen per party type. Customers and suppliers are both ledgers
  * underneath, but each gets its own page, its own list and its own add/edit
@@ -91,6 +94,10 @@ export function PartyPage({ config }: { config: PartyConfig }) {
   async function save() {
     if (!form.name.trim()) {
       setError(`${config.nameLabel} is required`);
+      return;
+    }
+    if (form.name.trim().length > NAME_MAX) {
+      setError(`${config.nameLabel} cannot be longer than ${NAME_MAX} characters`);
       return;
     }
     setSaving(true);
@@ -190,10 +197,24 @@ export function PartyPage({ config }: { config: PartyConfig }) {
               <tbody className="divide-y divide-ink-50">
                 {rows.map((l) => (
                   <tr key={l._id} className="transition hover:bg-brand-50/50">
-                    <td className="td font-bold text-ink-900">{l.name}</td>
+                    {/* Names, addresses and TRNs are free text and can run long.
+                        `.td` is nowrap, which suits phones and figures but lets
+                        one oversized value stretch the table until every other
+                        column is pushed off the right-hand edge. The cap goes on
+                        an inner block, since max-width on a cell is advisory in
+                        auto table layout and browsers may ignore it. */}
+                    <td className="td whitespace-normal font-bold text-ink-900">
+                      <div className="max-w-[22rem] break-words">{l.name}</div>
+                    </td>
                     <td className="td font-mono text-xs">{l.phone || '—'}</td>
-                    <td className="td">{l.address || '—'}</td>
-                    {config.showTrn && <td className="td font-mono text-xs">{l.trn || '—'}</td>}
+                    <td className="td whitespace-normal">
+                      <div className="max-w-[18rem] break-words">{l.address || '—'}</div>
+                    </td>
+                    {config.showTrn && (
+                      <td className="td whitespace-normal font-mono text-xs">
+                        <div className="max-w-[12rem] break-words">{l.trn || '—'}</div>
+                      </td>
+                    )}
                     {config.showOpeningBalance && (
                       <td className="td text-right font-semibold tabular-nums">
                         {fmt(l.openingBalance)}
@@ -248,6 +269,7 @@ export function PartyPage({ config }: { config: PartyConfig }) {
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder={`${config.nameLabel}…`}
+              maxLength={NAME_MAX}
             />
           </Field>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

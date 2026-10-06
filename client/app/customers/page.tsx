@@ -8,7 +8,7 @@ const CONFIG: PartyConfig = {
   noun: 'customer',
   sub: 'People who bring work in and are billed for it',
   showTrn: true,
-  showOpeningBalance: true,
+  showOpeningBalance: false,
   nameLabel: 'Customer Name',
   addressLabel: 'Address',
 };

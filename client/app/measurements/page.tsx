@@ -1,12 +1,24 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { api } from '@/lib/api';
 import { fmtDate } from '@/lib/format';
-import { MEASURE_FIELDS, type MeasurementProfile } from '@/lib/types';
-import { Card, EmptyState, TextInput } from '@/components/ui';
+import { MEASURE_FIELDS, type Ledger, type MeasurementProfile } from '@/lib/types';
+import { Card, EmptyState, Field, TextInput } from '@/components/ui';
+import { LedgerSearchInput } from '@/components/LedgerSearchInput';
+import { Modal } from '@/components/Modal';
 import { useToast } from '@/components/Toast';
+
+/** A person on file belongs to a customer, so the form always asks for one. */
+const blankForm = () => ({
+  ledgerId: '',
+  ledgerName: '',
+  name: '',
+  fabric: '',
+  size: '',
+  note: '',
+  values: {} as Record<string, string>,
+});
 
 /**
  * Everyone measured so far, across every customer.
@@ -22,6 +34,9 @@ export default function MeasurementsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [form, setForm] = useState(blankForm());
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(
     async (query: string) => {
@@ -44,6 +59,37 @@ export default function MeasurementsPage() {
     return () => clearTimeout(t);
   }, [q, load]);
 
+  async function save() {
+    if (!form.ledgerId) {
+      toast('Pick the customer this person belongs to', 'error');
+      return;
+    }
+    if (!form.name.trim()) {
+      toast("Give this person a name", 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.measurements.save({
+        ledgerId: form.ledgerId,
+        name: form.name.trim(),
+        fabric: form.fabric,
+        size: form.size,
+        note: form.note,
+        values: form.values,
+      });
+      setFormOpen(false);
+      // The server upserts on (customer, name), so an existing person is
+      // updated rather than duplicated. Say which happened, plainly.
+      toast(`Measurements saved for ${form.name.trim()}`, 'success');
+      await load(q);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save measurements', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   /** Names held by more than one customer in the current list. */
   const shared = useMemo(() => {
     const byName = new Map<string, Set<string>>();
@@ -62,9 +108,15 @@ export default function MeasurementsPage() {
           <h1 className="page-title">Measurements</h1>
           <p className="page-sub">{total} people on file</p>
         </div>
-        <Link href="/job-cards/new" className="btn-primary ml-auto">
-          ＋ New Order
-        </Link>
+        <button
+          className="btn-primary ml-auto"
+          onClick={() => {
+            setForm(blankForm());
+            setFormOpen(true);
+          }}
+        >
+          ＋ New Measurement
+        </button>
       </div>
 
       <Card className="mb-5 p-4">
@@ -99,7 +151,7 @@ export default function MeasurementsPage() {
           <div className="p-6">
             <EmptyState
               title="No measurements on file"
-              sub="They are saved from an order — tick 'Keep this person on file' when you take them."
+              sub="Add one with ＋ New Measurement, or take them on an order and tick 'Keep this person on file'."
             />
           </div>
         ) : (
@@ -180,6 +232,82 @@ export default function MeasurementsPage() {
           </div>
         )}
       </Card>
+
+      <Modal
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        title="New Measurement"
+        sub="Saved against a customer, ready to pull onto any future order"
+        wide
+        footer={
+          <>
+            <button className="btn-soft" onClick={() => setFormOpen(false)}>Cancel</button>
+            <button className="btn-primary" onClick={save} disabled={saving}>
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </>
+        }
+      >
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Customer *">
+            <LedgerSearchInput
+              value={form.ledgerName}
+              onChange={(v) => setForm((f) => ({ ...f, ledgerName: v, ledgerId: '' }))}
+              onPick={(l: Ledger) =>
+                setForm((f) => ({ ...f, ledgerId: l._id, ledgerName: l.name }))
+              }
+              placeholder="Search customers…"
+              autoFocus
+            />
+          </Field>
+          <Field label="Person's Name *">
+            <TextInput
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. Ali"
+            />
+          </Field>
+          <Field label="Fabric">
+            <TextInput
+              value={form.fabric}
+              onChange={(e) => setForm((f) => ({ ...f, fabric: e.target.value }))}
+            />
+          </Field>
+          <Field label="Size">
+            <TextInput
+              value={form.size}
+              onChange={(e) => setForm((f) => ({ ...f, size: e.target.value }))}
+            />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 lg:grid-cols-6">
+          {MEASURE_FIELDS.map((f) => (
+            <Field key={f} label={f}>
+              <TextInput
+                value={form.values[f] ?? ''}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    values: { ...prev.values, [f]: e.target.value },
+                  }))
+                }
+                className="input-sm text-center font-semibold"
+              />
+            </Field>
+          ))}
+        </div>
+
+        <div className="mt-4">
+          <Field label="Note">
+            <TextInput
+              value={form.note}
+              onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+              placeholder="Anything the tailor should know"
+            />
+          </Field>
+        </div>
+      </Modal>
     </div>
   );
 }

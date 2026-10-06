@@ -34,14 +34,29 @@ ledgerRouter.get(
 );
 
 // POST /ledgers
+/**
+ * Longest a party name may be. Real names, even full company names with a
+ * legal suffix, sit well under this; anything longer is a paste accident or
+ * someone probing the form, and it wrecks every list the name appears in.
+ */
+const NAME_MAX = 120;
+
+function cleanName(input: unknown): string {
+  const name = String(input ?? '').trim();
+  if (!name) throw new HttpError(400, 'Ledger name is required');
+  if (name.length > NAME_MAX) {
+    throw new HttpError(400, `Ledger name cannot be longer than ${NAME_MAX} characters`);
+  }
+  return name;
+}
+
 ledgerRouter.post(
   '/',
   requirePerm('ledgers.manage'),
   asyncHandler(async (req, res) => {
     const { name, phone, address, trn, openingBalance, type } = req.body ?? {};
-    if (!name || !String(name).trim()) throw new HttpError(400, 'Ledger name is required');
     const ledger = await Ledger.create({
-      name: String(name).trim(),
+      name: cleanName(name),
       phone,
       address,
       trn,
@@ -72,7 +87,7 @@ ledgerRouter.put(
     const ledger = await Ledger.findByIdAndUpdate(
       req.params.id,
       {
-        ...(name !== undefined ? { name: String(name).trim() } : {}),
+        ...(name !== undefined ? { name: cleanName(name) } : {}),
         ...(phone !== undefined ? { phone } : {}),
         ...(address !== undefined ? { address } : {}),
         ...(trn !== undefined ? { trn } : {}),
