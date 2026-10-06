@@ -738,15 +738,15 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
    * carrying no size, rather than naming a person who is not there.
    */
   function changeSets(next: EditableSet[]) {
-    // Naming somebody is the moment it becomes clear who the work is for, so
-    // they take the first line still waiting for a name. Only a line nobody
-    // has claimed is taken, and only the keystroke that first gives a person a
-    // name does it — clearing and retyping never moves an attachment somebody
-    // has since set by hand.
+    // Naming the first person is the one attachment worth guessing: a single
+    // order line and a single person can only mean each other. Everybody after
+    // them is picked by hand, because which garment belongs to the brother and
+    // which to the father is not something a form can know. Only the keystroke
+    // that first gives them a name does it, and only onto a line nobody has
+    // claimed, so nothing set by hand is ever moved.
     const had = new Map(sets.map((p) => [p.uid, p.name.trim().length > 0]));
-    const justNamed = next
-      .filter((p) => p.name.trim() && !had.get(p.uid))
-      .map((p) => p.uid);
+    const first = next[0];
+    const openingNamed = Boolean(first && first.name.trim() && !had.get(first.uid));
 
     setSets(next);
     setItems((rows) => {
@@ -754,10 +754,8 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
       const out = rows.map((r) =>
         !r.personUid || next.some((n) => n.uid === r.personUid) ? r : { ...r, personUid: '' },
       );
-      for (const uid of justNamed) {
-        const i = out.findIndex((r) => !r.personUid);
-        if (i === -1) break;
-        out[i] = { ...out[i], personUid: uid };
+      if (openingNamed && out[0] && !out[0].personUid) {
+        out[0] = { ...out[0], personUid: first.uid };
       }
       return out;
     });
