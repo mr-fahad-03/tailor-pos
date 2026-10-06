@@ -444,6 +444,7 @@ export function MeasurementSets({
                                         onPick={(pr) => pickMaterial(s.uid, i, pr)}
                                         disabled={readOnly}
                                         usableAs="material"
+                                        allowCreate
                                         placeholder="Type a code or material name…"
                                         className=""
                                       />

@@ -721,6 +721,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                               onPick={(p) => pickProduct(i, p)}
                               disabled={readOnly}
                               usableAs="item"
+                              allowCreate
                               placeholder="Type a code or product name…"
                               className=""
                             />

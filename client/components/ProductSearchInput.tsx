@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnchoredDropdown } from '@/components/AnchoredDropdown';
 import { api } from '@/lib/api';
+import { useAuth } from '@/components/AuthContext';
+import { ProductFormModal } from '@/components/ProductFormModal';
 import { fmt } from '@/lib/format';
 import type { Product, ProductUsagePicker } from '@/lib/types';
 
@@ -10,6 +12,10 @@ import type { Product, ProductUsagePicker } from '@/lib/types';
  * One box for a product: a code or a name both search it, and picking a row
  * calls onPick(product). `usableAs` narrows the catalogue to what this picker
  * is allowed to offer; left off, everything shows.
+ *
+ * `allowCreate` adds a ＋ beside it for a product that is not in the catalogue
+ * yet. It opens the same form the Products screen uses, pre-classified for
+ * this picker, and the saved product is selected into the row straight away.
  */
 export function ProductSearchInput({
   value,
@@ -18,6 +24,7 @@ export function ProductSearchInput({
   placeholder = 'Code',
   disabled,
   usableAs,
+  allowCreate = false,
   /** Codes read better monospaced; a product name does not. */
   className = 'font-mono uppercase',
 }: {
@@ -27,12 +34,16 @@ export function ProductSearchInput({
   placeholder?: string;
   disabled?: boolean;
   usableAs?: ProductUsagePicker;
+  allowCreate?: boolean;
   className?: string;
 }) {
+  const { can } = useAuth();
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<Product[]>([]);
+  const [creating, setCreating] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const canCreate = allowCreate && !disabled && can('products.manage');
 
   useEffect(() => {
     const fn = (e: MouseEvent) => {
@@ -60,7 +71,7 @@ export function ProductSearchInput({
   return (
     // `flex-1 min-w-0` so that sitting next to a code chip in a flex row does
     // not shrink the box to an <input>'s intrinsic ~20-character width.
-    <div ref={wrapRef} className="relative w-full min-w-0 flex-1">
+    <div ref={wrapRef} className="relative flex w-full min-w-0 flex-1 items-center gap-1.5">
       <input
         value={value}
         placeholder={placeholder}
@@ -79,6 +90,17 @@ export function ProductSearchInput({
         }}
         className={`input input-sm ${className}`}
       />
+      {canCreate && (
+        <button
+          type="button"
+          onClick={() => setCreating(true)}
+          title="Add a product that is not in the catalogue yet"
+          aria-label="New product"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-ink-300 text-ink-500 transition hover:border-brand-500 hover:bg-brand-50 hover:text-brand-700"
+        >
+          ＋
+        </button>
+      )}
       <AnchoredDropdown anchorRef={wrapRef} panelRef={panelRef} open={open && results.length > 0} width={288}>
         <>
           {results.map((p) => (
@@ -103,6 +125,19 @@ export function ProductSearchInput({
           </p>
         </>
       </AnchoredDropdown>
+      {canCreate && (
+        <ProductFormModal
+          open={creating}
+          onClose={() => setCreating(false)}
+          // Whatever was typed is almost certainly the name being looked for.
+          seedName={value}
+          defaultUsage={usableAs ?? 'both'}
+          onSaved={(p) => {
+            onPick(p);
+            setOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
