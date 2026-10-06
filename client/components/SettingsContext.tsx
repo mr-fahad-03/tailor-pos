@@ -12,7 +12,17 @@ const DEFAULTS: AppSettings = {
   deliveryDays: 7,
   // Left blank on purpose: an invoice must carry the shop's own details, and
   // a plausible-looking placeholder is worse than an obviously empty line.
-  company: { name: '', address: '', phone: '', email: '', website: '', trn: '' },
+  company: {
+    name: '',
+    address: '',
+    phone: '',
+    email: '',
+    website: '',
+    trn: '',
+    logo: '',
+    brandLogo: '',
+    brandTagline: '',
+  },
   bank: {
     name: '',
     accountType: '',
@@ -23,6 +33,7 @@ const DEFAULTS: AppSettings = {
     chequeFavour: '',
     note: '',
   },
+  invoiceTitle: 'Performa Invoice',
 };
 
 const SettingsCtx = createContext<{

@@ -144,16 +144,16 @@ export function ProductFormModal({
           />
         </Field>
         <Field label="Rate (AED)">
-          <TextInput type="number" value={form.rate} onChange={set('rate')} className="text-right" />
+          <TextInput type="number" value={form.rate} onChange={set('rate')} />
         </Field>
         <Field label="Wholesale Rate">
-          <TextInput type="number" value={form.wholesaleRate} onChange={set('wholesaleRate')} className="text-right" />
+          <TextInput type="number" value={form.wholesaleRate} onChange={set('wholesaleRate')} />
         </Field>
         <Field label="Unit">
           <TextInput value={form.unit} onChange={set('unit')} placeholder="PCS" />
         </Field>
         <Field label="Stock Qty">
-          <TextInput type="number" value={form.stockQty} onChange={set('stockQty')} className="text-right" />
+          <TextInput type="number" value={form.stockQty} onChange={set('stockQty')} />
         </Field>
       </div>
     </Modal>

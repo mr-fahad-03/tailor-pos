@@ -46,15 +46,43 @@ export function Field({
 
 type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
+/**
+ * Clicking into a figure selects it, so the next keystroke replaces it rather
+ * than landing beside the zero already sitting there.
+ *
+ * Deferred a frame on purpose: the click that gives the box focus then places
+ * the caret, which would undo a selection made here and now. The check on the
+ * way out is for a fast tab-through, where the caret has already moved on and
+ * stealing it back would be worse than doing nothing.
+ */
+export function selectOnFocus(e: React.FocusEvent<HTMLInputElement>) {
+  const el = e.currentTarget;
+  requestAnimationFrame(() => {
+    if (document.activeElement === el) el.select();
+  });
+}
+
 export const TextInput = React.forwardRef<HTMLInputElement, InputProps>(function TextInput(
-  { className = '', ...props },
+  { className = '', onFocus, ...props },
   ref,
 ) {
-  return <input ref={ref} {...props} className={`input ${className}`} />;
+  return (
+    <input
+      ref={ref}
+      {...props}
+      onFocus={(e) => {
+        onFocus?.(e);
+        // Only figures: a name or an address is read before it is edited, and
+        // wiping it on a stray click is how a correction becomes a retype.
+        if (props.type === 'number') selectOnFocus(e);
+      }}
+      className={`input ${className}`}
+    />
+  );
 });
 
 export const NumberInput = React.forwardRef<HTMLInputElement, InputProps>(function NumberInput(
-  { className = '', ...props },
+  { className = '', onFocus, ...props },
   ref,
 ) {
   return (
@@ -64,7 +92,11 @@ export const NumberInput = React.forwardRef<HTMLInputElement, InputProps>(functi
       step="any"
       min="0"
       {...props}
-      className={`input text-right tabular-nums ${className}`}
+      onFocus={(e) => {
+        onFocus?.(e);
+        selectOnFocus(e);
+      }}
+      className={`input text-left tabular-nums ${className}`}
     />
   );
 });

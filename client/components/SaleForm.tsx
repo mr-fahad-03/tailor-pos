@@ -332,7 +332,7 @@ export function SaleForm() {
           </Field>
         </div>
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <Field label="Party A/c">
+          <Field label="Customer Name">
             <div className="flex gap-2">
               <TextInput
                 value={partyName}

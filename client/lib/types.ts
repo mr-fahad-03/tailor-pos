@@ -349,6 +349,15 @@ export interface CompanyDetails {
   email: string;
   website: string;
   trn: string;
+  /**
+   * The mark at the head of the invoice. A data URI from a file chosen in
+   * Settings, or a URL — anything an <img> will take.
+   */
+  logo: string;
+  /** A second mark at the far side of the masthead, for a sub-brand. */
+  brandLogo: string;
+  /** The line under that second mark, e.g. "A Brand By …". */
+  brandTagline: string;
 }
 
 /** Printed at the foot of every invoice, so a customer can transfer. */
@@ -370,6 +379,8 @@ export interface AppSettings {
   deliveryDays: number;
   company: CompanyDetails;
   bank: BankDetails;
+  /** What the printed sheet calls itself, in red under the masthead. */
+  invoiceTitle: string;
 }
 
 export const MEASURE_FIELDS = [

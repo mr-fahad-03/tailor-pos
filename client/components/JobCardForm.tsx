@@ -449,19 +449,20 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
    */
   async function save(andPrint = false) {
     if (!partyName.trim()) {
-      toast('Party A/c (customer) is required', 'error');
+      toast('Customer Name is required', 'error');
       return;
     }
     setSaving(true);
     try {
+      // Saved and done with: the form is finished either way, so it hands
+      // over to the invoice or back to the list rather than sitting on a
+      // screen whose work is complete.
       if (mode === 'new') {
         const created = await api.jobCards.create(payload());
         settled.current = true;
         await rememberPeople();
         toast(`Order ${created.no} saved`);
-        router.push(
-          andPrint ? `/job-cards/${created._id}/invoice?print=1` : `/job-cards/${created._id}`,
-        );
+        router.push(andPrint ? `/job-cards/${created._id}/invoice?print=1` : '/job-cards');
       } else if (docId) {
         // Saving a draft in full is what promotes it to a real order.
         const updated = await api.jobCards.update(docId, {
@@ -470,13 +471,12 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         });
         settled.current = true;
         await rememberPeople();
-        loadDoc(updated);
         toast(
           status === 'draft'
             ? `Draft saved to orders as ${updated.no}`
             : `Order ${updated.no} updated`,
         );
-        if (andPrint) router.push(`/job-cards/${docId}/invoice?print=1`);
+        router.push(andPrint ? `/job-cards/${docId}/invoice?print=1` : '/job-cards');
       }
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Save failed', 'error');
@@ -840,7 +840,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 order the counter works: who the order is for and what it is
                 referenced by, then the book it came out of and its dates. */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-12">
-              <Field label="Party A/c (Customer)" className="col-span-2 sm:col-span-6">
+              <Field label="Customer Name" className="col-span-2 sm:col-span-6">
                 <LedgerSearchInput
                   value={partyName}
                   onChange={(v) => { setPartyName(v); setLedgerId(''); }}
@@ -892,10 +892,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               </Field>
 
               <Field label="Book No" className="sm:col-span-2">
-                {/* An identifier, not a figure: it reads left like Ref beside
-                    it, rather than right like Qty, Rate and Amount. `!`
-                    because NumberInput's own text-right would otherwise win. */}
-                <NumberInput value={bookNo} onChange={(e) => setBookNo(e.target.value)} disabled={readOnly} className="!text-left" />
+                <NumberInput value={bookNo} onChange={(e) => setBookNo(e.target.value)} disabled={readOnly} />
               </Field>
               {/* Opens the search over past orders — it belongs beside Book No
                   because the book number is what people search back by. */}

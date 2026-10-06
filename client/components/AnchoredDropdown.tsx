@@ -29,7 +29,19 @@ export function AnchoredDropdown({
   panelRef?: React.RefObject<HTMLDivElement>;
 }) {
   const [mounted, setMounted] = useState(false);
-  const [box, setBox] = useState<{ top: number; left: number; width: number } | null>(null);
+  /**
+   * Either a top or a bottom, never both: a panel that opens upwards has to
+   * be pinned by its own lower edge, because its height is not known until it
+   * has rendered. Pinning it by the top and subtracting a guess is what made
+   * it open over the field it belongs to.
+   */
+  const [box, setBox] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
   const ownRef = useRef<HTMLDivElement>(null);
   const ref = panelRef ?? ownRef;
 
@@ -48,9 +60,16 @@ export function AnchoredDropdown({
       // Keep the panel on screen when the field sits near the right edge.
       const left = Math.max(gutter, Math.min(r.left, window.innerWidth - w - gutter));
       const below = window.innerHeight - r.bottom;
+      const above = r.top;
       // Flip above when there is more room there than below.
-      const top = below < 220 && r.top > below ? r.top - 4 : r.bottom + 4;
-      setBox({ top, left, width: w });
+      const flip = below < 220 && above > below;
+      // Never taller than the room it has, so the last row is always reachable.
+      const maxHeight = Math.max(120, (flip ? above : below) - gutter * 2);
+      setBox(
+        flip
+          ? { bottom: window.innerHeight - r.top + 4, left, width: w, maxHeight }
+          : { top: r.bottom + 4, left, width: w, maxHeight },
+      );
     };
 
     place();
@@ -68,8 +87,14 @@ export function AnchoredDropdown({
   return createPortal(
     <div
       ref={ref}
-      style={{ position: 'fixed', top: box.top, left: box.left, width: box.width }}
-      className="z-[120] max-h-[min(20rem,60vh)] overflow-y-auto overflow-x-hidden rounded-xl border border-ink-200 bg-white shadow-pop"
+      style={{
+        position: 'fixed',
+        left: box.left,
+        width: box.width,
+        maxHeight: Math.min(box.maxHeight, 320),
+        ...(box.top !== undefined ? { top: box.top } : { bottom: box.bottom }),
+      }}
+      className="z-[120] overflow-y-auto overflow-x-hidden rounded-xl border border-ink-200 bg-white shadow-pop"
     >
       {children}
     </div>,

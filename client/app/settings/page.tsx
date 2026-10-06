@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Card, Field, NumberInput, SectionTitle, TextInput } from '@/components/ui';
 import { useSettings } from '@/components/SettingsContext';
+import { LogoField } from '@/components/LogoField';
 import { useToast } from '@/components/Toast';
 import { num } from '@/lib/format';
 import type { AppSettings } from '@/lib/types';
@@ -36,8 +37,11 @@ export default function SettingsPage() {
       bookNo: Math.round(num(form.bookNo, 270)),
       salesman: String(form.salesman || 'GENERAL').toUpperCase(),
       deliveryDays: Math.round(num(form.deliveryDays, 7)),
-      company: trim(form.company),
+      // The logos are left alone: a data URI must not be trimmed field by
+      // field like a line of text, and there is no whitespace in one anyway.
+      company: { ...trim(form.company), logo: form.company.logo, brandLogo: form.company.brandLogo },
       bank: trim(form.bank),
+      invoiceTitle: String(form.invoiceTitle || '').trim() || 'Performa Invoice',
     };
     save(cleaned);
     setForm(cleaned);
@@ -87,6 +91,19 @@ export default function SettingsPage() {
           sub="Printed at the head of every order invoice"
         />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Invoice Title" className="sm:col-span-2">
+            <TextInput
+              value={form.invoiceTitle}
+              onChange={(e) => update('invoiceTitle', e.target.value)}
+              placeholder="Performa Invoice"
+            />
+          </Field>
+          <LogoField
+            label="Logo"
+            hint="Shown at the top left. A PNG with a transparent background prints best."
+            value={form.company.logo}
+            onChange={(v) => updateCompany('logo', v)}
+          />
           <Field label="Company Name" className="sm:col-span-2">
             <TextInput
               value={form.company.name}
@@ -129,6 +146,19 @@ export default function SettingsPage() {
               onChange={(e) => updateCompany('trn', e.target.value)}
               placeholder="Tax registration number"
               className="font-mono"
+            />
+          </Field>
+          <LogoField
+            label="Second Logo (optional)"
+            hint="Shown at the top right, for a sub-brand. Leave it empty and that corner stays clear."
+            value={form.company.brandLogo}
+            onChange={(v) => updateCompany('brandLogo', v)}
+          />
+          <Field label="Second Logo Caption" className="sm:col-span-2">
+            <TextInput
+              value={form.company.brandTagline}
+              onChange={(e) => updateCompany('brandTagline', e.target.value)}
+              placeholder="e.g. A Brand By Crown Excel"
             />
           </Field>
         </div>

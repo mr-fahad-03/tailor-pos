@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { MEASURE_FIELDS, type MaterialLine, type MeasurementProfile, type MeasurementSet, type Product } from '@/lib/types';
-import { Field, NumberInput, TextInput } from '@/components/ui';
+import { Field, NumberInput, selectOnFocus, TextInput } from '@/components/ui';
 import { ProductSearchInput } from '@/components/ProductSearchInput';
 import { PersonSearchInput } from '@/components/PersonSearchInput';
 import { fmt, num } from '@/lib/format';
@@ -382,8 +382,9 @@ export function MeasurementSets({
                         patch(s.uid, { age: e.target.value === '' ? null : Number(e.target.value) })
                       }
                       disabled={readOnly}
+                      onFocus={selectOnFocus}
                       aria-label={`Age of ${s.name || 'this person'}`}
-                      className="input input-sm w-20 text-center tabular-nums"
+                      className="input input-sm w-20 text-left tabular-nums"
                     />
                   </label>
                   {!readOnly && (

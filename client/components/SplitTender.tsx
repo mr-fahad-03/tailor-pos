@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Icon, type IconName } from '@/components/icons';
 import { fmt, num } from '@/lib/format';
+import { selectOnFocus } from '@/components/ui';
 import type { SavedBank, SavedCard } from '@/lib/types';
 
 /** The three ways money comes across the counter. */
@@ -209,9 +210,10 @@ export function SplitTender({
           value={value[mode]}
           disabled={disabled}
           onChange={(e) => set(mode, e.target.value)}
+          onFocus={selectOnFocus}
           placeholder="0"
           aria-label={`Amount taken by ${MODES.find((m) => m.value === mode)?.label}`}
-          className="input input-sm w-24 bg-white text-right font-bold tabular-nums"
+          className="input input-sm w-24 bg-white text-left font-bold tabular-nums"
         />
         <span
           className={`text-[13px] font-bold tabular-nums ${

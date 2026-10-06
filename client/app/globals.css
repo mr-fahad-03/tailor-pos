@@ -23,6 +23,21 @@
   table {
     font-variant-numeric: tabular-nums;
   }
+  /* No spinner on a number box. The figures here are rates, quantities and
+     amounts that get typed, not nudged, and the arrows cost the width of two
+     characters in every one of them — in a table row that is the difference
+     between a readable figure and a clipped one. Typing, the arrow keys and
+     the scroll wheel all still work; only the painted control goes. */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 }
 
 @layer components {

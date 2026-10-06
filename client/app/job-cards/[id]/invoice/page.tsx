@@ -59,11 +59,33 @@ export default function InvoicePage() {
   }, [params?.id, toast]);
 
   // Printed only once the sheet has actually rendered, otherwise the dialog
-  // captures an empty page.
+  // captures an empty page — and only once the letterhead has decoded, or it
+  // prints with a gap where the logo should be. A mark hosted somewhere slow
+  // is given three seconds and then printed around.
   useEffect(() => {
     if (!autoPrint || loading || !card) return;
-    const t = setTimeout(() => window.print(), 300);
-    return () => clearTimeout(t);
+    let cancelled = false;
+    const t = setTimeout(() => {
+      const pending = Array.from(document.querySelectorAll('img'))
+        .filter((img) => !img.complete)
+        .map(
+          (img) =>
+            new Promise<void>((done) => {
+              img.addEventListener('load', () => done(), { once: true });
+              img.addEventListener('error', () => done(), { once: true });
+            }),
+        );
+      void Promise.race([
+        Promise.all(pending),
+        new Promise((give) => setTimeout(give, 3000)),
+      ]).then(() => {
+        if (!cancelled) window.print();
+      });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [autoPrint, loading, card]);
 
   if (loading) {

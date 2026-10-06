@@ -233,7 +233,7 @@ export default function LedgersPage() {
             <TextInput value={form.trn} onChange={set('trn')} className="font-mono" />
           </Field>
           <Field label="Opening Balance">
-            <TextInput type="number" value={form.openingBalance} onChange={set('openingBalance')} className="text-right" />
+            <TextInput type="number" value={form.openingBalance} onChange={set('openingBalance')} />
           </Field>
         </div>
       </Modal>
