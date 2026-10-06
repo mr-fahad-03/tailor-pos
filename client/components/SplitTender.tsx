@@ -34,7 +34,8 @@ export interface BankFields {
   bankName: string;
   accountName: string;
   iban: string;
-  reference: string;
+  /** The bank's SWIFT/BIC code, e.g. NBADAEAA. */
+  swift: string;
 }
 
 export interface TenderDetails {
@@ -44,7 +45,7 @@ export interface TenderDetails {
 
 export const emptyDetails = (): TenderDetails => ({
   card: { holder: '', number: '', expiry: '', cvc: '' },
-  bank: { bankName: '', accountName: '', iban: '', reference: '' },
+  bank: { bankName: '', accountName: '', iban: '', swift: '' },
 });
 
 /** The last four digits, which is the only part of a number worth keeping. */
@@ -324,6 +325,7 @@ export function SplitTender({
                         bankName: b.bankName ?? '',
                         accountName: b.accountName ?? '',
                         iban: b.iban ?? '',
+                        swift: b.swift ?? '',
                       },
                     })
                   }
@@ -364,13 +366,13 @@ export function SplitTender({
                 className="input input-sm font-mono text-xs"
               />
             </Labelled>
-            <Labelled label="Transfer Reference">
+            <Labelled label="SWIFT Number">
               <input
-                value={details.bank.reference}
+                value={details.bank.swift}
                 disabled={disabled}
-                onChange={(e) => setBank('reference', e.target.value)}
-                placeholder="Transaction no."
-                className="input input-sm"
+                onChange={(e) => setBank('swift', e.target.value.toUpperCase())}
+                placeholder="e.g. NBADAEAA"
+                className="input input-sm font-mono"
               />
             </Labelled>
           </div>

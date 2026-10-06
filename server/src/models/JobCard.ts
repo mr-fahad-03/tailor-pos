@@ -35,6 +35,7 @@ export interface IJobCardPayment {
   /** Bank tenders only. */
   accountName?: string;
   iban?: string;
+  swift?: string;
 }
 
 /** 'draft' is an order abandoned part-finished — it is not real work yet. */
@@ -131,6 +132,7 @@ const paymentSchema = new Schema<IJobCardPayment>(
     cardExpiry: String,
     accountName: String,
     iban: String,
+    swift: String,
   },
   { _id: false },
 );

@@ -32,6 +32,10 @@ export interface Ledger {
   type: 'customer' | 'supplier' | 'general';
   savedCards?: SavedCard[];
   savedBanks?: SavedBank[];
+  /** Set by the database when the record was first written. */
+  createdAt?: string;
+  /** What they owe right now. Supplied by the list and by /ledgers/:id/due. */
+  due?: number;
 }
 
 /** An address as it should read on a document, from the parts that are set. */
@@ -67,6 +71,8 @@ export interface SavedBank {
   bankName?: string;
   accountName?: string;
   iban?: string;
+  /** The bank's SWIFT/BIC code. */
+  swift?: string;
 }
 
 /** Where a product may be used: a charged line, a consumed material, or both. */
@@ -131,6 +137,7 @@ export interface JobCardPayment {
   /** Bank tenders only. */
   accountName?: string;
   iban?: string;
+  swift?: string;
 }
 
 /** A length of cloth or trim consumed by one person's garment. */

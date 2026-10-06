@@ -395,6 +395,7 @@ interface PaymentBody {
   cardExpiry?: string;
   accountName?: string;
   iban?: string;
+  swift?: string;
 }
 
 /**
@@ -417,6 +418,7 @@ function tenderDetails(p: PaymentBody) {
     return {
       accountName: p.accountName?.trim() || undefined,
       iban: p.iban?.replace(/\s+/g, '').toUpperCase() || undefined,
+      swift: p.swift?.trim().toUpperCase() || undefined,
     };
   }
   return {};
@@ -436,6 +438,7 @@ function applyPayment(doc: {
     cardExpiry?: string;
     accountName?: string;
     iban?: string;
+    swift?: string;
   }[];
   advance: number;
   advanceBeforeTax: number;

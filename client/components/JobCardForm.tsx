@@ -597,7 +597,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 bank: bankT.bankName,
                 accountName: bankT.accountName,
                 iban: bankT.iban,
-                reference: bankT.reference,
+                swift: bankT.swift,
               }
             : {}),
         });
@@ -621,6 +621,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                     bankName: bankT.bankName,
                     accountName: bankT.accountName,
                     iban: bankT.iban,
+                    swift: bankT.swift,
                   },
                 }
               : {}),
@@ -1168,6 +1169,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                       p.cardExpiry,
                       p.bank,
                       p.iban ? `…${p.iban.slice(-4)}` : '',
+                      p.swift,
                       p.reference,
                     ]
                       .filter(Boolean)

@@ -32,9 +32,52 @@ ledgerRouter.get(
       Ledger.find(filter).sort({ name: 1 }).skip((page - 1) * limit).limit(limit).lean(),
       Ledger.countDocuments(filter),
     ]);
-    res.json({ items, total, page, limit });
+    res.json({ items: await withDue(items as LedgerRow[]), total, page, limit });
   }),
 );
+
+interface LedgerRow {
+  _id: unknown;
+  openingBalance?: number;
+}
+
+/**
+ * Attach what each party currently owes to a page of ledgers.
+ *
+ * Two grouped queries for the whole page rather than one pair per row: a
+ * hundred customers on screen would otherwise be two hundred round trips.
+ * What counts towards the figure is the same as the single-party endpoint
+ * below — see it for why converted orders and returns are treated as they
+ * are.
+ */
+async function withDue<T extends LedgerRow>(rows: T[]): Promise<(T & { due: number })[]> {
+  if (!rows.length) return [];
+  const ids = rows.map((r) => r._id);
+  const [orders, sales] = await Promise.all([
+    JobCard.aggregate([
+      { $match: { ledgerId: { $in: ids }, status: { $in: ['open', 'closed'] } } },
+      { $group: { _id: '$ledgerId', due: { $sum: '$balance' } } },
+    ]),
+    Sale.aggregate([
+      { $match: { ledgerId: { $in: ids } } },
+      {
+        $group: {
+          _id: '$ledgerId',
+          due: { $sum: { $cond: ['$isReturn', { $multiply: ['$balance', -1] }, '$balance'] } },
+        },
+      },
+    ]),
+  ]);
+  const byId = new Map<string, number>();
+  for (const g of [...orders, ...sales]) {
+    const key = String(g._id);
+    byId.set(key, num(byId.get(key)) + num(g.due));
+  }
+  return rows.map((r) => ({
+    ...r,
+    due: r2(num(r.openingBalance) + num(byId.get(String(r._id)))),
+  }));
+}
 
 // POST /ledgers
 /**
@@ -201,7 +244,7 @@ ledgerRouter.post(
   asyncHandler(async (req, res) => {
     const { card, bank } = (req.body ?? {}) as {
       card?: { holder?: string; last4?: string; number?: string; expiry?: string };
-      bank?: { bankName?: string; accountName?: string; iban?: string };
+      bank?: { bankName?: string; accountName?: string; iban?: string; swift?: string };
     };
     const ledger = await Ledger.findById(req.params.id);
     if (!ledger) throw new HttpError(404, 'Ledger not found');
@@ -228,6 +271,7 @@ ledgerRouter.post(
       const iban = String(bank.iban ?? '').replace(/\s+/g, '').toUpperCase().slice(0, 40);
       const bankName = String(bank.bankName ?? '').trim().slice(0, NAME_MAX);
       const accountName = String(bank.accountName ?? '').trim().slice(0, NAME_MAX);
+      const swift = String(bank.swift ?? '').trim().toUpperCase().slice(0, 20);
       if (iban || bankName) {
         const same = (ledger.savedBanks ?? []).find(
           (b: { iban?: string; bankName?: string }) =>
@@ -236,8 +280,9 @@ ledgerRouter.post(
         if (same) {
           if (bankName) same.bankName = bankName;
           if (accountName) same.accountName = accountName;
+          if (swift) same.swift = swift;
         } else {
-          ledger.savedBanks.push({ bankName, accountName, iban });
+          ledger.savedBanks.push({ bankName, accountName, iban, swift });
         }
       }
     }

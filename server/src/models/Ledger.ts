@@ -21,6 +21,8 @@ export interface ISavedBank {
   bankName?: string;
   accountName?: string;
   iban?: string;
+  /** The bank's SWIFT/BIC code. */
+  swift?: string;
 }
 
 export interface ILedger extends Document {
@@ -69,6 +71,7 @@ const savedBankSchema = new Schema<ISavedBank>({
   bankName: { type: String, trim: true },
   accountName: { type: String, trim: true },
   iban: { type: String, trim: true, uppercase: true },
+  swift: { type: String, trim: true, uppercase: true },
 });
 
 const ledgerSchema = new Schema<ILedger>(
