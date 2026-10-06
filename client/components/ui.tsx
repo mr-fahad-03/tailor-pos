@@ -62,10 +62,21 @@ export function selectOnFocus(e: React.FocusEvent<HTMLInputElement>) {
   });
 }
 
+/**
+ * Scrolling the page with the pointer over a focused number box used to
+ * change the figure in it — a rate quietly going from 3970 to 3975 on the way
+ * past. Letting go of focus stops that: the page scrolls as it should, and
+ * the box keeps the number that was typed into it.
+ */
+export function blurOnWheel(e: React.WheelEvent<HTMLInputElement>) {
+  if (document.activeElement === e.currentTarget) e.currentTarget.blur();
+}
+
 export const TextInput = React.forwardRef<HTMLInputElement, InputProps>(function TextInput(
-  { className = '', onFocus, ...props },
+  { className = '', onFocus, onWheel, ...props },
   ref,
 ) {
+  const isNumber = props.type === 'number';
   return (
     <input
       ref={ref}
@@ -74,7 +85,11 @@ export const TextInput = React.forwardRef<HTMLInputElement, InputProps>(function
         onFocus?.(e);
         // Only figures: a name or an address is read before it is edited, and
         // wiping it on a stray click is how a correction becomes a retype.
-        if (props.type === 'number') selectOnFocus(e);
+        if (isNumber) selectOnFocus(e);
+      }}
+      onWheel={(e) => {
+        onWheel?.(e);
+        if (isNumber) blurOnWheel(e);
       }}
       className={`input ${className}`}
     />
@@ -82,7 +97,7 @@ export const TextInput = React.forwardRef<HTMLInputElement, InputProps>(function
 });
 
 export const NumberInput = React.forwardRef<HTMLInputElement, InputProps>(function NumberInput(
-  { className = '', onFocus, ...props },
+  { className = '', onFocus, onWheel, ...props },
   ref,
 ) {
   return (
@@ -95,6 +110,10 @@ export const NumberInput = React.forwardRef<HTMLInputElement, InputProps>(functi
       onFocus={(e) => {
         onFocus?.(e);
         selectOnFocus(e);
+      }}
+      onWheel={(e) => {
+        onWheel?.(e);
+        blurOnWheel(e);
       }}
       className={`input text-left tabular-nums ${className}`}
     />

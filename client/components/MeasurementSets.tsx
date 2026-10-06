@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { MEASURE_FIELDS, type MaterialLine, type MeasurementProfile, type MeasurementSet, type Product } from '@/lib/types';
-import { Field, NumberInput, selectOnFocus, TextInput } from '@/components/ui';
+import { blurOnWheel, Field, NumberInput, selectOnFocus, TextInput } from '@/components/ui';
 import { ProductSearchInput } from '@/components/ProductSearchInput';
 import { PersonSearchInput } from '@/components/PersonSearchInput';
 import { fmt, num } from '@/lib/format';
@@ -383,6 +383,7 @@ export function MeasurementSets({
                       }
                       disabled={readOnly}
                       onFocus={selectOnFocus}
+                      onWheel={blurOnWheel}
                       aria-label={`Age of ${s.name || 'this person'}`}
                       className="input input-sm w-20 text-left tabular-nums"
                     />

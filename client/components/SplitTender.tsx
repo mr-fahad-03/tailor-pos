@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Icon, type IconName } from '@/components/icons';
 import { fmt, num } from '@/lib/format';
-import { selectOnFocus } from '@/components/ui';
+import { blurOnWheel, selectOnFocus } from '@/components/ui';
 import type { SavedBank, SavedCard } from '@/lib/types';
 
 /** The three ways money comes across the counter. */
@@ -211,6 +211,7 @@ export function SplitTender({
           disabled={disabled}
           onChange={(e) => set(mode, e.target.value)}
           onFocus={selectOnFocus}
+          onWheel={blurOnWheel}
           placeholder="0"
           aria-label={`Amount taken by ${MODES.find((m) => m.value === mode)?.label}`}
           className="input input-sm w-24 bg-white text-left font-bold tabular-nums"
@@ -410,16 +411,25 @@ export function SplitTender({
         })}
       </div>
 
-      {/* commit, with what is being handed over */}
+      {/* What is being handed over, and — on an order that already has a
+          number — the button that takes it. Before the order exists there is
+          nothing to press: the figure is counted here and goes through when
+          the order is saved, so a dead button would only invite clicking. */}
       <div className="mt-2.5 flex items-center gap-2 rounded-xl bg-ink-50 p-1.5">
-        <button
-          type="button"
-          onClick={onPay}
-          disabled={disabled || busy || !onPay || taken <= 0}
-          className="flex shrink-0 items-center gap-2 rounded-xl bg-brand-700 px-4 py-2 text-[13px] font-bold text-white transition hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {busy ? 'Saving…' : payLabel}
-        </button>
+        {onPay ? (
+          <button
+            type="button"
+            onClick={onPay}
+            disabled={disabled || busy || taken <= 0}
+            className="flex shrink-0 items-center gap-2 rounded-xl bg-brand-700 px-4 py-2 text-[13px] font-bold text-white transition hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {busy ? 'Saving…' : payLabel}
+          </button>
+        ) : (
+          <span className="shrink-0 px-2 text-[11px] font-bold uppercase tracking-wider text-ink-500">
+            {payLabel}
+          </span>
+        )}
         <span className="flex-1 text-right text-sm font-black tabular-nums text-ink-900">
           {fmt(taken)} <span className="text-xs font-bold text-ink-400">AED</span>
         </span>

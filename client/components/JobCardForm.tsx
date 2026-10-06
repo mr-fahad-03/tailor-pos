@@ -201,6 +201,9 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   const [ledgerOpen, setLedgerOpen] = useState(false);
   /** Set when an order line is asked to show the person it is stitched to. */
   const [reveal, setReveal] = useState<{ uid: string; at: number } | null>(null);
+  /** The row just opened by the Save under the measurements, ringed briefly. */
+  const [freshItem, setFreshItem] = useState(-1);
+  const itemRowsRef = useRef<HTMLTableSectionElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [findQ, setFindQ] = useState('');
@@ -405,13 +408,18 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   }
 
   /**
-   * The Save under the measurements does two jobs, and neither of them is
-   * saving the order — that is the pair of buttons in the payment panel.
+   * The Save under the measurements finishes one person and sets up the next.
+   * It does not save the order — that is the pair of buttons in the payment
+   * panel.
    *
-   * It files everyone on the order against the customer, so their sizes are
-   * offered by name on the next order, and then opens a fresh order line for
-   * whatever is being made next. The line is opened either way: somebody who
-   * has not picked a customer yet still wants the row.
+   * Three things happen: everyone named is filed against the customer so
+   * their sizes are offered next time, a fresh block is opened for the next
+   * person, and an order line is opened already attached to them. The page
+   * then goes to that line, because what the counter does next is name the
+   * garment being made.
+   *
+   * The block and the line are opened either way: somebody who has not picked
+   * a customer yet still wants both.
    */
   async function fileMeasurements() {
     const keep = sets.filter((m) => m.remember !== false && m.name.trim());
@@ -435,7 +443,17 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         );
         toast(`${keep.length} ${keep.length === 1 ? 'person' : 'people'} kept on file`);
       }
-      setItems((rows) => [...rows, emptyItem()]);
+      // The next person, and the line that will be stitched for them.
+      const next = newSet();
+      setSets((prev) => [...prev, next]);
+      setFreshItem(items.length);
+      setItems((rows) => [...rows, emptyItem(next.uid)]);
+      // One tick later, once the row is actually in the table.
+      setTimeout(() => {
+        const row = itemRowsRef.current?.lastElementChild;
+        row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 60);
+      setTimeout(() => setFreshItem(-1), 1600);
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Could not keep the measurements on file', 'error');
     } finally {
@@ -454,30 +472,37 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     }
     setSaving(true);
     try {
-      // Saved and done with: the form is finished either way, so it hands
-      // over to the invoice or back to the list rather than sitting on a
-      // screen whose work is complete.
+      let doc: JobCard | null = null;
       if (mode === 'new') {
-        const created = await api.jobCards.create(payload());
-        settled.current = true;
-        await rememberPeople();
-        toast(`Order ${created.no} saved`);
-        router.push(andPrint ? `/job-cards/${created._id}/invoice?print=1` : '/job-cards');
+        doc = await api.jobCards.create(payload());
       } else if (docId) {
         // Saving a draft in full is what promotes it to a real order.
-        const updated = await api.jobCards.update(docId, {
+        doc = await api.jobCards.update(docId, {
           ...payload(),
           ...(status === 'draft' ? { status: 'open' } : {}),
         });
-        settled.current = true;
-        await rememberPeople();
-        toast(
-          status === 'draft'
-            ? `Draft saved to orders as ${updated.no}`
-            : `Order ${updated.no} updated`,
-        );
-        router.push(andPrint ? `/job-cards/${docId}/invoice?print=1` : '/job-cards');
       }
+      if (!doc) return;
+      settled.current = true;
+      await rememberPeople();
+
+      // Anything counted on the tender pad is taken with the order. That is
+      // the whole point of letting it be counted before the order exists:
+      // the customer is handing money over now, and Save & Print must put it
+      // on the invoice as paid rather than print a sheet saying it is owed.
+      const taken = await bookSplit(doc._id, doc.balance, false);
+
+      const what =
+        mode === 'new'
+          ? `Order ${doc.no} saved`
+          : status === 'draft'
+            ? `Draft saved to orders as ${doc.no}`
+            : `Order ${doc.no} updated`;
+      toast(taken > 0 ? `${what} · ${fmt(taken)} AED taken` : what);
+
+      // Saved and done with: the form hands over to the invoice or back to
+      // the list rather than sitting on a screen whose work is complete.
+      router.push(andPrint ? `/job-cards/${doc._id}/invoice?print=1` : '/job-cards');
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Save failed', 'error');
     } finally {
@@ -630,98 +655,109 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
 
   /**
-   * Record the split as one payment per tender used.
+   * Book whatever is on the tender pad against an order, one payment per
+   * tender used, and return what was actually taken.
    *
    * Each goes through the same endpoint a part payment uses, so nothing about
    * how a payment is booked changes — only how many are sent. Anything handed
    * over above the balance is change, so only the balance is ever recorded.
+   *
+   * Two callers: the Advance button on an order that already exists, and Save
+   * on one being created, where the money is taken in the same breath as the
+   * order. The second does not want the form reloaded underneath it, because
+   * it is about to leave the page.
    */
-  async function paySplit() {
-    if (!docId) return;
-    const due = Math.max(calc.balance, 0);
+  async function bookSplit(id: string, due: number, refresh: boolean): Promise<number> {
     const entries = (['cash', 'card', 'bank'] as TenderMode[])
       .map((mode) => ({ mode, amount: num(split[mode]) }))
       .filter((e) => e.amount > 0);
-    if (!entries.length) return;
+    if (!entries.length) return 0;
 
     // Trim the last tender back so the booked total never exceeds the balance.
-    let left = due;
+    let left = Math.max(due, 0);
     const booked: { mode: TenderMode; amount: number }[] = [];
     for (const e of entries) {
-      const take = Math.round(Math.min(e.amount, left) * 100) / 100;
+      const take = r2(Math.min(e.amount, left));
       if (take > 0) booked.push({ mode: e.mode, amount: take });
-      left = Math.round((left - take) * 100) / 100;
+      left = r2(left - take);
       if (left <= 0) break;
     }
-    if (!booked.length) {
-      toast('Nothing left to pay on this order', 'info');
-      return;
-    }
+    if (!booked.length) return 0;
 
-    setPayingSplit(true);
-    try {
-      const card = tenderDetails.card;
-      const bankT = tenderDetails.bank;
-      let latest: JobCard | null = null;
-      for (const b of booked) {
-        latest = await api.jobCards.addPayment(docId, {
-          mode: b.mode,
-          amount: b.amount,
-          discount: 0,
-          // The card number itself is deliberately not sent: the server keeps
-          // the last four and nothing else, so there is no reason to put the
-          // whole number on the wire. The CVC never leaves this component.
-          ...(b.mode === 'card'
-            ? {
-                cardHolder: card.holder,
-                cardLast4: last4(card.number),
-                cardExpiry: card.expiry,
-              }
+    const card = tenderDetails.card;
+    const bankT = tenderDetails.bank;
+    let latest: JobCard | null = null;
+    for (const b of booked) {
+      latest = await api.jobCards.addPayment(id, {
+        mode: b.mode,
+        amount: b.amount,
+        discount: 0,
+        // The card number itself is deliberately not sent: the server keeps
+        // the last four and nothing else, so there is no reason to put the
+        // whole number on the wire. The CVC never leaves this component.
+        ...(b.mode === 'card'
+          ? {
+              cardHolder: card.holder,
+              cardLast4: last4(card.number),
+              cardExpiry: card.expiry,
+            }
+          : {}),
+        ...(b.mode === 'bank'
+          ? {
+              bank: bankT.bankName,
+              accountName: bankT.accountName,
+              iban: bankT.iban,
+              swift: bankT.swift,
+            }
+          : {}),
+      });
+    }
+    if (refresh && latest) loadDoc(latest);
+
+    // Remember the details against the customer, so the next order offers
+    // them instead of asking again. A failure here must not look like a
+    // failed payment — the money is already booked.
+    const usedCard = booked.some((b) => b.mode === 'card');
+    const usedBank = booked.some((b) => b.mode === 'bank');
+    if (ledgerId && (usedCard || usedBank)) {
+      try {
+        const saved = await api.ledgers.savePaymentDetails(ledgerId, {
+          ...(usedCard
+            ? { card: { holder: card.holder, last4: last4(card.number), expiry: card.expiry } }
             : {}),
-          ...(b.mode === 'bank'
+          ...(usedBank
             ? {
-                bank: bankT.bankName,
-                accountName: bankT.accountName,
-                iban: bankT.iban,
-                swift: bankT.swift,
+                bank: {
+                  bankName: bankT.bankName,
+                  accountName: bankT.accountName,
+                  iban: bankT.iban,
+                  swift: bankT.swift,
+                },
               }
             : {}),
         });
+        setSavedCards(saved.savedCards ?? []);
+        setSavedBanks(saved.savedBanks ?? []);
+      } catch {
+        // Nothing to tell the counter: the payment went through either way.
       }
-      if (latest) loadDoc(latest);
+    }
 
-      // Remember the details against the customer, so the next order offers
-      // them instead of asking again. A failure here must not look like a
-      // failed payment — the money is already booked.
-      const usedCard = booked.some((b) => b.mode === 'card');
-      const usedBank = booked.some((b) => b.mode === 'bank');
-      if (ledgerId && (usedCard || usedBank)) {
-        try {
-          const saved = await api.ledgers.savePaymentDetails(ledgerId, {
-            ...(usedCard
-              ? { card: { holder: card.holder, last4: last4(card.number), expiry: card.expiry } }
-              : {}),
-            ...(usedBank
-              ? {
-                  bank: {
-                    bankName: bankT.bankName,
-                    accountName: bankT.accountName,
-                    iban: bankT.iban,
-                    swift: bankT.swift,
-                  },
-                }
-              : {}),
-          });
-          setSavedCards(saved.savedCards ?? []);
-          setSavedBanks(saved.savedBanks ?? []);
-        } catch {
-          // Nothing to tell the counter: the payment went through either way.
-        }
+    setSplit(emptySplit());
+    setTenderDetails(emptyDetails());
+    return r2(booked.reduce((t, b) => t + b.amount, 0));
+  }
+
+  /** The Advance button, on an order that already has a number. */
+  async function paySplit() {
+    if (!docId) return;
+    setPayingSplit(true);
+    try {
+      const total = await bookSplit(docId, calc.balance, true);
+      if (total <= 0) {
+        toast('Nothing left to pay on this order', 'info');
+        return;
       }
-
-      setSplit(emptySplit());
-      setTenderDetails(emptyDetails());
-      const total = booked.reduce((t, b) => t + b.amount, 0);
       toast(`Payment of ${fmt(total)} AED recorded`);
       // Taking the money is the moment the invoice is wanted, so the pad hands
       // straight over to it with the print dialog already opening. The payment
@@ -940,7 +976,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                     {!readOnly && <th className="th w-10" />}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-ink-100">
+                <tbody ref={itemRowsRef} className="divide-y divide-ink-100">
                   {items.map((r, i) => {
                     const c = calc.rows[i];
                     return (
@@ -955,9 +991,9 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                           if (el.closest('input, button, select, textarea, a')) return;
                           setReveal({ uid: r.personUid, at: Date.now() });
                         }}
-                        className={
-                          r.personUid ? 'cursor-pointer transition hover:bg-brand-50/50' : undefined
-                        }
+                        className={`transition ${r.personUid ? 'cursor-pointer hover:bg-brand-50/50' : ''} ${
+                          freshItem === i ? 'bg-brand-50' : ''
+                        }`}
                       >
                         <td className="td text-ink-400">{i + 1}</td>
                         <td className="td">
@@ -1198,7 +1234,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               busy={payingSplit}
               note={
                 !docId
-                  ? 'Save the order first — a payment is recorded against a saved order.'
+                  ? 'Counted now, taken when you press Save — it will show as paid on the invoice.'
                   : !canPay
                     ? 'You do not have permission to take payments.'
                     : undefined
