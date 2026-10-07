@@ -62,12 +62,12 @@ export function ProductSearchInput({
     if (!open || disabled) return;
     const t = setTimeout(async () => {
       try {
-        const r = await api.products.list(value, 1, 8, usableAs);
+        const r = await api.products.list(value, 1, 25, usableAs);
         setResults(r.items);
       } catch {
         setResults([]);
       }
-    }, 250);
+    }, 150);
     return () => clearTimeout(t);
   }, [value, open, disabled, usableAs]);
 
@@ -82,6 +82,19 @@ export function ProductSearchInput({
   );
   const offerCreate = canCreate && typed.length > 0 && !known;
 
+  const handleBlur = () => {
+    if (typed && results.length > 0) {
+      const match = results.find(
+        (p) =>
+          p.name.toLowerCase() === typed.toLowerCase() ||
+          (p.code ?? '').toLowerCase() === typed.toLowerCase(),
+      );
+      if (match) {
+        onPick(match);
+      }
+    }
+  };
+
   return (
     // `flex-1 min-w-0` so that sitting next to a code chip in a flex row does
     // not shrink the box to an <input>'s intrinsic ~20-character width.
@@ -90,12 +103,11 @@ export function ProductSearchInput({
         value={value}
         placeholder={placeholder}
         disabled={disabled}
+        onFocus={() => setOpen(true)}
+        onBlur={handleBlur}
         onChange={(e) => {
           onChange(e.target.value);
-          // Suggestions follow what is being typed, rather than greeting an
-          // empty box with the whole catalogue. Clearing the box shuts them
-          // again — F2 is still there to browse everything deliberately.
-          setOpen(e.target.value.trim().length > 0);
+          setOpen(true);
         }}
         onKeyDown={(e) => {
           if (e.key === 'F2') setOpen(true);
@@ -121,7 +133,8 @@ export function ProductSearchInput({
             <button
               key={p._id}
               type="button"
-              onClick={() => {
+              onMouseDown={(e) => {
+                e.preventDefault();
                 onPick(p);
                 setOpen(false);
               }}
@@ -137,14 +150,19 @@ export function ProductSearchInput({
           {offerCreate && (
             <button
               type="button"
-              onClick={() => {
+              onMouseDown={(e) => {
+                e.preventDefault();
                 setCreating(true);
                 setOpen(false);
               }}
-              className="flex w-full items-center gap-2 border-t border-ink-100 px-3 py-2 text-left text-[13px] font-bold text-brand-700 hover:bg-brand-50"
+              className="flex w-full items-center justify-between gap-2 border-t border-ink-100 px-3 py-2 text-left text-[12px] hover:bg-brand-50"
             >
-              <span aria-hidden>＋</span>
-              <span className="truncate">Add “{typed}” as a new product</span>
+              <span className="truncate font-semibold text-rose-600">
+                “{typed}” Not Available
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded bg-brand-600 px-2 py-0.5 font-bold text-white shadow-sm hover:bg-brand-700">
+                ＋ Add New
+              </span>
             </button>
           )}
           {results.length > 0 && (

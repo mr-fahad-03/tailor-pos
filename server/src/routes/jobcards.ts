@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Types } from 'mongoose';
 import { JobCard } from '../models/JobCard';
 import { MeasurementProfile } from '../models/MeasurementProfile';
 import { Sale } from '../models/Sale';
@@ -20,6 +21,12 @@ import {
  */
 const REF_PREFIX = 'Ref';
 
+function validObjectIdStr(id?: unknown): string | undefined {
+  if (!id || typeof id !== 'string') return undefined;
+  const s = id.trim();
+  return Types.ObjectId.isValid(s) ? s : undefined;
+}
+
 /** Drop blank material rows and coerce the numbers. */
 function cleanMaterials(input: unknown) {
   if (!Array.isArray(input)) return [];
@@ -34,9 +41,9 @@ function cleanMaterials(input: unknown) {
 }
 
 /** Drop blank rows and coerce every measurement value to a trimmed string. */
-function cleanMeasurementSets(input: JobCardBody['measurementSets']) {
+function cleanMeasurementSets(input: JobCardBody['measurementSets'], partyName?: string) {
   if (!Array.isArray(input)) return undefined;
-  return input
+  const cleaned = input
     .map((set) => {
       const values: Record<string, string> = {};
       for (const [k, v] of Object.entries(set?.values ?? {})) {
@@ -51,18 +58,20 @@ function cleanMeasurementSets(input: JobCardBody['measurementSets']) {
         rawAge === undefined || rawAge === null || rawAge === ''
           ? null
           : Math.max(0, num(rawAge));
+      const materials = cleanMaterials((set as { materials?: unknown })?.materials);
+      const name = String(set?.name ?? '').trim();
       return {
         // Kept as the client generated it, so the order lines that point at
         // this person still find them after a round trip.
         uid: (set as { uid?: string })?.uid || undefined,
-        profileId: set?.profileId || undefined,
-        name: String(set?.name ?? '').trim(),
+        profileId: validObjectIdStr(set?.profileId),
+        name,
         age,
         fabric: set?.fabric,
         size: set?.size,
         qty: Math.max(0, num(set?.qty, 1)),
         values,
-        materials: cleanMaterials((set as { materials?: unknown })?.materials),
+        materials,
       };
     })
     // a row with nothing typed into it at all is an empty slot
@@ -70,9 +79,16 @@ function cleanMeasurementSets(input: JobCardBody['measurementSets']) {
       (set) =>
         set.name ||
         set.age !== null ||
+        (set.fabric ?? '').trim() ||
+        (set.size ?? '').trim() ||
         Object.keys(set.values).length > 0 ||
         set.materials.length > 0,
     );
+
+  return cleaned.map((set, idx) => ({
+    ...set,
+    name: set.name || (idx === 0 ? (partyName?.trim() || 'Person 1') : `Person ${idx + 1}`),
+  }));
 }
 
 export const jobCardRouter = Router();
@@ -157,7 +173,7 @@ function buildComputed(body: JobCardBody) {
   const totals = jobCardTotals(items, num(body.discount), taxRate, num(body.additionalCharges));
   // Legacy orders kept one shared list; materials now sit on each person.
   const materialsUsed = cleanMaterials(body.materialsUsed);
-  const perPerson = (cleanMeasurementSets(body.measurementSets) ?? []).flatMap(
+  const perPerson = (cleanMeasurementSets(body.measurementSets, body.partyName) ?? []).flatMap(
     (set) => set.materials,
   );
   const materialTotal =
@@ -182,7 +198,8 @@ async function filePeople(
   ledgerId: string | undefined,
   sets: JobCardBody['measurementSets'],
 ): Promise<void> {
-  if (!ledgerId || !Array.isArray(sets)) return;
+  const validLedgerId = validObjectIdStr(ledgerId);
+  if (!validLedgerId || !Array.isArray(sets)) return;
   const keep = sets.filter((m) => m?.remember !== false && String(m?.name ?? '').trim());
   await Promise.all(
     keep.map((m) => {
@@ -193,10 +210,10 @@ async function filePeople(
         if (str) values[k] = str;
       }
       return MeasurementProfile.findOneAndUpdate(
-        { ledgerId, name },
+        { ledgerId: validLedgerId, name },
         {
           $set: { values, archived: false, lastUsedAt: new Date() },
-          $setOnInsert: { ledgerId, name },
+          $setOnInsert: { ledgerId: validLedgerId, name },
         },
         { upsert: true, runValidators: true },
       );
@@ -307,11 +324,11 @@ jobCardRouter.post(
       no,
       bookNo: num(body.bookNo, 270),
       ref: body.ref?.trim() || `${REF_PREFIX}-${no}`,
-      date: body.date ? new Date(body.date) : new Date(),
-      deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : undefined,
+      date: body.date && !isNaN(new Date(body.date).getTime()) ? new Date(body.date) : new Date(),
+      deliveryDate: body.deliveryDate && !isNaN(new Date(body.deliveryDate).getTime()) ? new Date(body.deliveryDate) : undefined,
       partyName: body.partyName?.trim(),
       phone: body.phone?.trim(),
-      ledgerId: body.ledgerId || undefined,
+      ledgerId: validObjectIdStr(body.ledgerId),
       isNewCustomer: !!body.isNewCustomer,
       accountsAc: body.accountsAc?.trim(),
       invoiceNo: body.invoiceNo?.trim(),
@@ -324,7 +341,7 @@ jobCardRouter.post(
       measurements: body.measurements ?? {},
       fabric: body.fabric,
       size: body.size,
-      measurementSets: cleanMeasurementSets(body.measurementSets) ?? [],
+      measurementSets: cleanMeasurementSets(body.measurementSets, body.partyName) ?? [],
       materialsUsed: computed.materialsUsed,
       materialTotal: computed.materialTotal,
       jobCost: r2(num(body.jobCost)),
@@ -393,7 +410,7 @@ jobCardRouter.put(
       deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : existing.deliveryDate,
       partyName: body.partyName?.trim() ?? existing.partyName,
       phone: body.phone?.trim() ?? existing.phone,
-      ledgerId: body.ledgerId !== undefined ? body.ledgerId || undefined : existing.ledgerId,
+      ledgerId: body.ledgerId !== undefined ? validObjectIdStr(body.ledgerId) : existing.ledgerId,
       isNewCustomer: body.isNewCustomer !== undefined ? !!body.isNewCustomer : existing.isNewCustomer,
       accountsAc: body.accountsAc?.trim() ?? existing.accountsAc,
       invoiceNo: body.invoiceNo?.trim() ?? existing.invoiceNo,
@@ -406,7 +423,7 @@ jobCardRouter.put(
       measurements: existing.measurements,
       fabric: body.fabric ?? existing.fabric,
       size: body.size ?? existing.size,
-      measurementSets: cleanMeasurementSets(body.measurementSets) ?? existing.measurementSets,
+      measurementSets: cleanMeasurementSets(body.measurementSets, body.partyName ?? existing.partyName) ?? existing.measurementSets,
       materialsUsed: computed.materialsUsed,
       materialTotal: computed.materialTotal,
       jobCost: body.jobCost !== undefined ? r2(num(body.jobCost)) : existing.jobCost,

@@ -132,15 +132,17 @@ export function LedgerSearchInput({
               so the way to put them on file is offered right where the search
               failed instead of sending the counter off to find a ＋ button. */}
           {empty && (
-            <div className="px-3 py-2">
-              <p className="text-[13px] font-semibold text-ink-500">No customer found</p>
+            <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <span className="truncate text-[12px] font-semibold text-rose-600">
+                “{typed}” Not Available
+              </span>
               {onCreate && (
                 <button
                   type="button"
                   onClick={create}
-                  className="mt-1.5 w-full rounded-lg bg-brand-700 px-3 py-1.5 text-[13px] font-bold text-white transition hover:bg-brand-800"
+                  className="inline-flex shrink-0 items-center gap-1 rounded bg-brand-600 px-2.5 py-1 text-[12px] font-bold text-white transition hover:bg-brand-700"
                 >
-                  ＋ Add &ldquo;{typed}&rdquo; as a new customer
+                  ＋ Add New
                 </button>
               )}
             </div>

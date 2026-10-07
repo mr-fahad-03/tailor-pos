@@ -29,6 +29,7 @@ import {
 import { Modal } from './Modal';
 import { LedgerSearchModal } from './LedgerSearchModal';
 import { LedgerSearchInput } from './LedgerSearchInput';
+import { LedgerFormModal } from './LedgerFormModal';
 import {
   SplitTender,
   emptySplit,
@@ -199,8 +200,28 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   // Only ever opened to add somebody: an existing customer is found by typing
   // into the name box itself.
   const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [editCustomerOpen, setEditCustomerOpen] = useState(false);
+  const [editingLedger, setEditingLedger] = useState<Ledger | null>(null);
+
+  async function handleEditCustomer() {
+    if (!ledgerId) {
+      setEditingLedger(null);
+      setEditCustomerOpen(true);
+      return;
+    }
+    try {
+      const l = await api.ledgers.get(ledgerId);
+      setEditingLedger(l);
+      setEditCustomerOpen(true);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not load customer details', 'error');
+    }
+  }
+
   /** Set when an order line is asked to show the person it is stitched to. */
   const [reveal, setReveal] = useState<{ uid: string; at: number } | null>(null);
+  /** Currently active/selected person UID for light green highlighting. */
+  const [activePersonUid, setActivePersonUid] = useState<string>('');
   /** The row just opened by the Save under the measurements, ringed briefly. */
   const [freshItem, setFreshItem] = useState(-1);
   const itemRowsRef = useRef<HTMLTableSectionElement>(null);
@@ -704,12 +725,45 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     setIsNew(false);
   }
 
+  function selectAndFocusItem(i: number, scrollDown = true) {
+    let targetUid = items[i]?.personUid ?? '';
+
+    if (!targetUid || !sets.some((s) => s.uid === targetUid)) {
+      const usedUids = new Set(items.map((r) => r.personUid).filter(Boolean));
+      const freeSet = sets.find((s) => !usedUids.has(s.uid));
+
+      if (freeSet) {
+        targetUid = freeSet.uid;
+        if (!freeSet.name.trim() && items[i]?.productName?.trim()) {
+          setSets((prev) =>
+            prev.map((s) => (s.uid === freeSet.uid ? { ...s, name: items[i].productName.trim() } : s)),
+          );
+        }
+      } else {
+        const setName = items[i]?.productName?.trim() || `Person ${sets.length + 1}`;
+        const fresh = newSet({ name: setName });
+        targetUid = fresh.uid;
+        setSets((prev) => [...prev, fresh]);
+      }
+
+      setItems((rows) => rows.map((r, idx) => (idx === i ? { ...r, personUid: targetUid } : r)));
+    }
+
+    setActivePersonUid(targetUid);
+    if (scrollDown && targetUid) {
+      setReveal({ uid: targetUid, at: Date.now() });
+    }
+  }
+
   function pickProduct(i: number, p: Product) {
     setItems((rows) =>
       rows.map((r, idx) =>
         idx === i ? { ...r, code: p.code, productName: p.name, rate: String(p.rate) } : r,
       ),
     );
+    setTimeout(() => {
+      selectAndFocusItem(i, false);
+    }, 50);
   }
 
   async function searchFind() {
@@ -808,20 +862,52 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 order the counter works: who the order is for and what it is
                 referenced by, then the book it came out of and its dates. */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-12">
-              <Field label="Customer Name" className="col-span-2 sm:col-span-6">
-                <LedgerSearchInput
-                  value={partyName}
-                  onChange={(v) => { setPartyName(v); setLedgerId(''); }}
-                  onPick={pickLedger}
-                  onCreate={canAddLedger ? () => setLedgerOpen(true) : undefined}
-                  disabled={readOnly}
-                  placeholder="Start typing a customer's name…"
-                  className="font-semibold"
-                />
-                {/* What they owed before this order was written, so whoever is
-                    at the counter knows to ask for it. It covers their opening
-                    balance, unpaid orders and unpaid bills — this order is not
-                    in it until it is saved. A negative figure is credit. */}
+              <div className="col-span-2 sm:col-span-7">
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="label mb-0">CUSTOMER NAME</label>
+                  {canAddLedger && (
+                    <button
+                      type="button"
+                      onClick={handleEditCustomer}
+                      disabled={readOnly}
+                      title="Update customer details (view/edit all customer details)"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-ink-200 bg-white px-3 py-1 text-xs font-semibold text-ink-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-50"
+                    >
+                      <span className="text-sm">✏️</span>
+                      <span>Update User</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <LedgerSearchInput
+                      value={partyName}
+                      onChange={(v) => {
+                        setPartyName(v);
+                        setLedgerId('');
+                      }}
+                      onPick={pickLedger}
+                      onCreate={canAddLedger ? () => setLedgerOpen(true) : undefined}
+                      disabled={readOnly}
+                      placeholder="Start typing a customer's name…"
+                      className="font-semibold"
+                    />
+                  </div>
+                  {canAddLedger && (
+                    <button
+                      type="button"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-ink-200 bg-white text-ink-600 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-50"
+                      onClick={() => setLedgerOpen(true)}
+                      disabled={readOnly}
+                      title="Add a customer to the ledger and put them on this order"
+                      aria-label="New customer"
+                    >
+                      <Icon name="plus" className="h-5 w-5" />
+                    </button>
+                  )}
+                </div>
+
                 {due && priorDue !== 0 && (
                   <p
                     className={`mt-1 text-[11px] font-bold ${
@@ -840,22 +926,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                       : `In credit: ${fmt(Math.abs(priorDue))} AED`}
                   </p>
                 )}
-              </Field>
-              {/* Only for somebody who is not on file yet — anyone who is
-                  turns up in the box beside this as their name is typed. */}
-              <Field label="&nbsp;" className="sm:col-span-1">
-                {canAddLedger && (
-                  <button
-                    className="btn-soft w-full"
-                    onClick={() => setLedgerOpen(true)}
-                    disabled={readOnly}
-                    title="Add a customer to the ledger and put them on this order"
-                    aria-label="New customer"
-                  >
-                    <Icon name="plus" className="h-[17px] w-[17px]" />
-                  </button>
-                )}
-              </Field>
+              </div>
               <Field label="Ref" className="col-span-2 sm:col-span-5">
                 <TextInput value={ref} onChange={(e) => setRef(e.target.value)} disabled={readOnly} className="font-mono" />
               </Field>
@@ -888,7 +959,15 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-extrabold tracking-tight text-ink-900">Order Items</h2>
               {!readOnly && (
-                <button className="btn-soft !py-1.5 text-xs" onClick={() => setItems((r) => [...r, emptyItem()])}>
+                <button
+                  className="btn-soft !py-1.5 text-xs"
+                  onClick={() => {
+                    const freshSet = newSet();
+                    setSets((prev) => [...prev, freshSet]);
+                    setItems((r) => [...r, emptyItem(freshSet.uid)]);
+                    setActivePersonUid(freshSet.uid);
+                  }}
+                >
                   ＋ Add row
                 </button>
               )}
@@ -912,21 +991,23 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 <tbody ref={itemRowsRef} className="divide-y divide-ink-100">
                   {items.map((r, i) => {
                     const c = calc.rows[i];
+                    const isSelected = Boolean(r.personUid && activePersonUid === r.personUid);
                     return (
                       <tr
                         key={i}
-                        // Anywhere on the row that is not itself something to
-                        // press takes you to the person it is stitched for.
-                        // The boxes and buttons keep their own jobs.
                         onClick={(e) => {
-                          if (!r.personUid) return;
                           const el = e.target as HTMLElement;
-                          if (el.closest('input, button, select, textarea, a')) return;
-                          setReveal({ uid: r.personUid, at: Date.now() });
+                          // Ignore clicks inside Product input, Qty input, Rate input, or Remove button!
+                          if (el.closest('input, select, textarea, button[title="Remove row"]')) {
+                            return;
+                          }
+                          selectAndFocusItem(i, true);
                         }}
-                        className={`transition ${r.personUid ? 'cursor-pointer hover:bg-brand-50/50' : ''} ${
-                          freshItem === i ? 'bg-brand-50' : ''
-                        }`}
+                        className={`transition-all duration-200 cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-100/90 text-emerald-950 font-semibold ring-2 ring-emerald-500/80 shadow-md border-l-4 border-emerald-600'
+                            : 'hover:bg-emerald-50/60'
+                        } ${freshItem === i ? 'bg-brand-50' : ''}`}
                       >
                         <td className="td text-ink-400">{i + 1}</td>
                         <td className="td">
@@ -958,8 +1039,13 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                           <AttachSizePicker
                             people={sets}
                             value={r.personUid}
-                            onChange={(uid) => updateItem(i, { personUid: uid })}
-                            onReveal={(uid) => setReveal({ uid, at: Date.now() })}
+                            onChange={(uid) => {
+                              updateItem(i, { personUid: uid });
+                              setActivePersonUid(uid);
+                            }}
+                            onReveal={(uid) => {
+                              setActivePersonUid(uid);
+                            }}
                             disabled={readOnly}
                           />
                         </td>
@@ -991,6 +1077,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               ledgerId={ledgerId || undefined}
               readOnly={readOnly}
               revealToken={reveal}
+              activeUid={activePersonUid}
             />
 
             {/* What the order cost against what it sells for, read down the
@@ -1007,7 +1094,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                     className="text-sm font-black tabular-nums text-ink-900"
                     title="Everything booked under Materials Used, for every person on this order"
                   >
-                    : {fmt(calc.materialTotal)}
+                    : {fmt(calc.materialTotal)} AED
                   </dd>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1235,6 +1322,18 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         onSelect={pickLedger}
         startIn="newCustomer"
         seedName={partyName}
+      />
+
+      <LedgerFormModal
+        open={editCustomerOpen}
+        onClose={() => setEditCustomerOpen(false)}
+        type="customer"
+        editing={editingLedger}
+        seedName={partyName}
+        onSaved={(l) => {
+          pickLedger(l);
+          setEditCustomerOpen(false);
+        }}
       />
 
       <Modal

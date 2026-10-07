@@ -84,7 +84,10 @@ export function AttachSizePicker({
       {attached && !disabled && (
         <button
           type="button"
-          onClick={() => setOpen((o) => !o)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((o) => !o);
+          }}
           title="Attach this line to somebody else"
           aria-label="Change the attached person"
           aria-haspopup="listbox"

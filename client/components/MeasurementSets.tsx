@@ -62,6 +62,7 @@ export function MeasurementSets({
   ledgerId,
   readOnly,
   revealToken = null,
+  activeUid = '',
 }: {
   sets: EditableSet[];
   onChange: (next: EditableSet[]) => void;
@@ -73,6 +74,8 @@ export function MeasurementSets({
    * clicking the same order line twice would be the same value and do nothing.
    */
   revealToken?: { uid: string; at: number } | null;
+  /** Currently active item's person UID to show ONLY this set's measurements. */
+  activeUid?: string;
 }) {
   const { toast } = useToast();
   const [profiles, setProfiles] = useState<MeasurementProfile[]>([]);
@@ -85,14 +88,13 @@ export function MeasurementSets({
     const { uid } = revealToken;
     setCollapsed((c) => ({ ...c, [uid]: false }));
     setFlash(uid);
-    // One tick later: a block that was shut is still shut this render, and
-    // scrolling to it now would aim at the collapsed height.
     const scroll = setTimeout(() => {
-      document
-        .getElementById(`person-${uid}`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const container = document.getElementById(`person-${uid}`);
+      if (container) {
+        container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     }, 60);
-    const off = setTimeout(() => setFlash(''), 1600);
+    const off = setTimeout(() => setFlash(''), 3000);
     return () => {
       clearTimeout(scroll);
       clearTimeout(off);
@@ -135,34 +137,32 @@ export function MeasurementSets({
 
   function patchMaterial(uid: string, i: number, change: Partial<MaterialLine>) {
     onChange(
-      sets.map((s) =>
-        s.uid === uid
-          ? {
-              ...s,
-              materials: (s.materials ?? []).map((m, idx) =>
-                idx === i ? { ...m, ...change } : m,
-              ),
-            }
-          : s,
-      ),
+      sets.map((s) => {
+        if (s.uid !== uid) return s;
+        const current = s.materials && s.materials.length > 0 ? s.materials : [blankMaterial()];
+        const updated = current.map((m, idx) => (idx === i ? { ...m, ...change } : m));
+        return { ...s, materials: updated };
+      }),
     );
   }
 
   function addMaterial(uid: string) {
     onChange(
-      sets.map((s) =>
-        s.uid === uid ? { ...s, materials: [...(s.materials ?? []), blankMaterial()] } : s,
-      ),
+      sets.map((s) => {
+        if (s.uid !== uid) return s;
+        const current = s.materials && s.materials.length > 0 ? s.materials : [blankMaterial()];
+        return { ...s, materials: [...current, blankMaterial()] };
+      }),
     );
   }
 
   function removeMaterial(uid: string, i: number) {
     onChange(
-      sets.map((s) =>
-        s.uid === uid
-          ? { ...s, materials: (s.materials ?? []).filter((_, idx) => idx !== i) }
-          : s,
-      ),
+      sets.map((s) => {
+        if (s.uid !== uid) return s;
+        const remaining = (s.materials ?? []).filter((_, idx) => idx !== i);
+        return { ...s, materials: remaining.length > 0 ? remaining : [blankMaterial()] };
+      }),
     );
   }
 
@@ -301,25 +301,35 @@ export function MeasurementSets({
         </div>
       </div>
 
-      {sets.length === 0 ? (
-        <div className="rounded-lg border-2 border-dashed border-ink-200 bg-ink-50/50 px-4 py-8 text-center">
-          <p className="text-sm font-semibold text-ink-700">No measurements yet</p>
-          <p className="mt-1 text-xs text-ink-500">
-            Press <strong>Add person</strong>, or tick someone saved beside it.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {sets.map((s, idx) => {
-            const isShut = collapsed[s.uid];
-            const filled = Object.values(s.values).filter(Boolean).length;
-            return (
-              <div
-                key={s.uid}
-                id={`person-${s.uid}`}
-                className={`rounded-lg border bg-white transition ${
+      {(() => {
+        const activeTarget = activeUid || revealToken?.uid || sets[0]?.uid || '';
+        const matchedSets = sets.filter((s) => s.uid === activeTarget);
+        const displaySets = matchedSets.length > 0 ? matchedSets : sets.slice(0, 1);
+
+        if (sets.length === 0) {
+          return (
+            <div className="rounded-lg border-2 border-dashed border-ink-200 bg-ink-50/50 px-4 py-8 text-center">
+              <p className="text-sm font-semibold text-ink-700">No measurements yet</p>
+              <p className="mt-1 text-xs text-ink-500">
+                Press <strong>Add person</strong>, or tick someone saved beside it.
+              </p>
+            </div>
+          );
+        }
+
+        return (
+          <div className="space-y-3">
+            {displaySets.map((s) => {
+              const idx = sets.findIndex((item) => item.uid === s.uid);
+              const isShut = collapsed[s.uid];
+              const filled = Object.values(s.values).filter(Boolean).length;
+              return (
+                <div
+                  key={s.uid}
+                  id={`person-${s.uid}`}
+                className={`rounded-lg border bg-white transition-all duration-200 ${
                   flash === s.uid
-                    ? 'border-brand-500 ring-2 ring-brand-300'
+                    ? 'border-emerald-500 ring-2 ring-emerald-400 bg-emerald-50/20 shadow-md'
                     : 'border-ink-200'
                 }`}
               >
@@ -429,107 +439,114 @@ export function MeasurementSets({
                         </div>
                       </div>
 
-                      {(s.materials ?? []).length === 0 ? (
-                        <p className="rounded-lg bg-ink-50 px-3 py-2.5 text-xs text-ink-500">
-                          No materials recorded for {s.name.trim() || 'this person'}.
-                        </p>
-                      ) : (
-                        <div className="overflow-x-auto rounded-lg border border-ink-200">
-                          <table className="w-full min-w-[480px]">
-                            <thead className="bg-ink-50">
-                              <tr>
-                                <th className="th w-8">Sl</th>
-                                <th className="th">Product</th>
-                                <th className="th w-20 text-right">Qty</th>
-                                <th className="th w-24 text-right">Rate</th>
-                                <th className="th w-24 text-right">Amount</th>
-                                {!readOnly && <th className="th w-8" />}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-ink-100">
-                              {(s.materials ?? []).map((m, i) => (
-                                <tr key={i}>
-                                  <td className="td !px-2 !py-1.5 text-ink-400">{i + 1}</td>
-                                  <td className="td !px-2 !py-1.5">
-                                    <div className="flex items-center gap-2">
-                                      {m.code && (
-                                        <span className="shrink-0 rounded bg-ink-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-brand-700">
-                                          {m.code}
-                                        </span>
-                                      )}
-                                      <ProductSearchInput
-                                        value={m.productName ?? ''}
-                                        onChange={(v) => patchMaterial(s.uid, i, { productName: v, code: '' })}
-                                        onPick={(pr) => pickMaterial(s.uid, i, pr)}
-                                        disabled={readOnly}
-                                        usableAs="material"
-                                        allowCreate
-                                        placeholder="Type a code or material name…"
-                                        className=""
-                                      />
-                                    </div>
-                                  </td>
-                                  <td className="td !px-2 !py-1.5">
-                                    <NumberInput
-                                      value={String(m.qty ?? '')}
-                                      onChange={(e) =>
-                                        patchMaterial(s.uid, i, { qty: Number(e.target.value) })
-                                      }
-                                      disabled={readOnly}
-                                      className="input-sm"
-                                    />
-                                  </td>
-                                  <td className="td !px-2 !py-1.5">
-                                    <NumberInput
-                                      value={String(m.rate ?? '')}
-                                      onChange={(e) =>
-                                        patchMaterial(s.uid, i, { rate: Number(e.target.value) })
-                                      }
-                                      disabled={readOnly}
-                                      className="input-sm"
-                                    />
-                                  </td>
-                                  <td className="td !px-2 !py-1.5 text-right font-semibold tabular-nums">
-                                    {fmt(num(m.qty) * num(m.rate))}
-                                  </td>
-                                  {!readOnly && (
-                                    <td className="td !px-2 !py-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => removeMaterial(s.uid, i)}
-                                        aria-label="Remove material row"
-                                        className="text-rose-500 transition hover:text-rose-700"
-                                      >
-                                        ✕
-                                      </button>
-                                    </td>
-                                  )}
+                      {(() => {
+                        const materialsList = (s.materials && s.materials.length > 0) ? s.materials : [blankMaterial()];
+                        return (
+                          <div className="overflow-x-auto rounded-lg border border-ink-200">
+                            <table className="w-full min-w-[480px]">
+                              <thead className="bg-ink-50">
+                                <tr>
+                                  <th className="th w-8">Sl</th>
+                                  <th className="th">Product</th>
+                                  <th className="th w-20 text-right">Qty</th>
+                                  <th className="th w-24 text-right">Rate</th>
+                                  <th className="th w-24 text-right">Amount</th>
+                                  {!readOnly && <th className="th w-8" />}
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
+                              </thead>
+                              <tbody className="divide-y divide-ink-100">
+                                {materialsList.map((m, i) => (
+                                  <tr key={i}>
+                                    <td className="td !px-2 !py-1.5 text-ink-400">{i + 1}</td>
+                                    <td className="td !px-2 !py-1.5">
+                                      <div className="flex items-center gap-2">
+                                        {m.code && (
+                                          <span className="shrink-0 rounded bg-ink-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-brand-700">
+                                            {m.code}
+                                          </span>
+                                        )}
+                                        <ProductSearchInput
+                                          value={m.productName ?? ''}
+                                          onChange={(v) => patchMaterial(s.uid, i, { productName: v, code: '' })}
+                                          onPick={(pr) => pickMaterial(s.uid, i, pr)}
+                                          disabled={readOnly}
+                                          usableAs="material"
+                                          allowCreate
+                                          placeholder="Type a code or material name…"
+                                          className=""
+                                        />
+                                      </div>
+                                    </td>
+                                    <td className="td !px-2 !py-1.5">
+                                      <NumberInput
+                                        value={String(m.qty ?? '')}
+                                        onChange={(e) =>
+                                          patchMaterial(s.uid, i, { qty: Number(e.target.value) })
+                                        }
+                                        disabled={readOnly}
+                                        className="input-sm"
+                                      />
+                                    </td>
+                                    <td className="td !px-2 !py-1.5">
+                                      <NumberInput
+                                        value={String(m.rate ?? '')}
+                                        onChange={(e) =>
+                                          patchMaterial(s.uid, i, { rate: Number(e.target.value) })
+                                        }
+                                        disabled={readOnly}
+                                        className="input-sm"
+                                      />
+                                    </td>
+                                    <td className="td !px-2 !py-1.5 text-right font-semibold tabular-nums">
+                                      {fmt(num(m.qty) * num(m.rate))}
+                                    </td>
+                                    {!readOnly && (
+                                      <td className="td !px-2 !py-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => removeMaterial(s.uid, i)}
+                                          aria-label="Remove material row"
+                                          className="text-rose-500 transition hover:text-rose-700"
+                                        >
+                                          ✕
+                                        </button>
+                                      </td>
+                                    )}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        );
+                      })()}
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 pt-2.5">
+                        {ledgerId && !readOnly ? (
+                          <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] font-medium text-ink-600 hover:text-ink-900">
+                            <input
+                              type="checkbox"
+                              checked={s.remember !== false}
+                              onChange={(e) => patch(s.uid, { remember: e.target.checked })}
+                              className="h-3.5 w-3.5 rounded border-ink-300 text-brand-600 focus:ring-brand-500"
+                            />
+                            Keep {s.name.trim() || 'this person'} on file for next time
+                          </label>
+                        ) : (
+                          <div />
+                        )}
 
-                    {ledgerId && !readOnly && (
-                      <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-[13px] text-ink-600">
-                        <input
-                          type="checkbox"
-                          checked={s.remember !== false}
-                          onChange={(e) => patch(s.uid, { remember: e.target.checked })}
-                          className="h-3.5 w-3.5 rounded border-ink-300 text-brand-600 focus:ring-brand-500"
-                        />
-                        Keep {s.name.trim() || 'this person'} on file for next time
-                      </label>
-                    )}
+                        <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800">
+                          Material Used Cost: <span className="tabular-nums font-black text-emerald-900">{fmt(materialsTotal(s.materials))} AED</span>
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
             );
           })}
         </div>
-      )}
+      );
+    })()}
     </div>
   );
 }

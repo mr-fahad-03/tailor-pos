@@ -24,7 +24,14 @@ function searchFilter(q?: string) {
  */
 function usageFilter(usableAs?: string) {
   if (usableAs !== 'item' && usableAs !== 'material') return null;
-  return { $or: [{ usage: { $in: [usableAs, 'both'] } }, { usage: { $exists: false } }] };
+  return {
+    $or: [
+      { usage: { $in: [usableAs, 'both'] } },
+      { usage: { $exists: false } },
+      { usage: null },
+      { usage: '' },
+    ],
+  };
 }
 
 // GET /products?q=&category=&usableAs=&page=&limit=

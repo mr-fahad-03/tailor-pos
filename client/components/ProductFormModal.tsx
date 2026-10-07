@@ -70,10 +70,26 @@ export function ProductFormModal({
   const [form, setForm] = useState<Form>(emptyForm);
   const [saving, setSaving] = useState(false);
 
-  // Reset on each opening rather than on every render, so typing is not lost.
   useEffect(() => {
     if (!open) return;
-    setForm(editing ? formFrom(editing) : { ...emptyForm, name: seedName, usage: defaultUsage });
+    if (editing) {
+      setForm(formFrom(editing));
+    } else {
+      setForm({ ...emptyForm, name: seedName, usage: defaultUsage });
+      void (async () => {
+        try {
+          const res = await api.products.list('', 1, 100);
+          const numericCodes = res.items
+            .map((p) => parseInt(p.code, 10))
+            .filter((n) => !isNaN(n) && n > 0);
+          const maxCode = numericCodes.length ? Math.max(...numericCodes) : 5000;
+          const nextCode = String(maxCode + 1);
+          setForm((f) => (f.code ? f : { ...f, code: nextCode }));
+        } catch {
+          // ignore fallback
+        }
+      })();
+    }
   }, [open, editing, seedName, defaultUsage]);
 
   const set = (k: keyof Form) => (e: { target: { value: string } }) =>
