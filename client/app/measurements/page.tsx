@@ -36,6 +36,8 @@ export default function MeasurementsPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(blankForm());
+  /** The customer box is out of the way until somebody asks to attach one. */
+  const [attachOpen, setAttachOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(
@@ -61,7 +63,9 @@ export default function MeasurementsPage() {
 
   async function save() {
     if (!form.ledgerId) {
-      toast('Pick the customer this person belongs to', 'error');
+      // Show the box rather than talking about one that is not on screen.
+      setAttachOpen(true);
+      toast('Attach the customer this person belongs to', 'error');
       return;
     }
     if (!form.name.trim()) {
@@ -112,6 +116,7 @@ export default function MeasurementsPage() {
           className="btn-primary ml-auto"
           onClick={() => {
             setForm(blankForm());
+            setAttachOpen(false);
             setFormOpen(true);
           }}
         >
@@ -237,7 +242,7 @@ export default function MeasurementsPage() {
         open={formOpen}
         onClose={() => setFormOpen(false)}
         title="New Measurement"
-        sub="Saved against a customer, ready to pull onto any future order"
+        sub="Attach a customer and these sizes are ready to pull onto any future order"
         wide
         footer={
           <>
@@ -249,24 +254,53 @@ export default function MeasurementsPage() {
         }
       >
         <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Customer *">
-            <LedgerSearchInput
-              value={form.ledgerName}
-              onChange={(v) => setForm((f) => ({ ...f, ledgerName: v, ledgerId: '' }))}
-              onPick={(l: Ledger) =>
-                setForm((f) => ({ ...f, ledgerId: l._id, ledgerName: l.name }))
-              }
-              placeholder="Search customers…"
-              autoFocus
-            />
-          </Field>
+          {/* Who is being measured comes first — it is what this record is.
+              The customer it is filed under is a second question, asked by
+              pressing Attach, so the form opens on the name and not on a
+              search box for somebody else. */}
           <Field label="Person's Name *">
             <TextInput
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               placeholder="e.g. Ali"
+              autoFocus
             />
           </Field>
+          {attachOpen || form.ledgerId ? (
+            <Field label="Customer *">
+              <div className="flex items-center gap-2">
+                <LedgerSearchInput
+                  value={form.ledgerName}
+                  onChange={(v) => setForm((f) => ({ ...f, ledgerName: v, ledgerId: '' }))}
+                  onPick={(l: Ledger) =>
+                    setForm((f) => ({ ...f, ledgerId: l._id, ledgerName: l.name }))
+                  }
+                  placeholder="Start typing a customer's name…"
+                  autoFocus
+                />
+                <button
+                  onClick={() => {
+                    setForm((f) => ({ ...f, ledgerId: '', ledgerName: '' }));
+                    setAttachOpen(false);
+                  }}
+                  title="Detach the customer"
+                  aria-label="Detach the customer"
+                  className="shrink-0 rounded-lg px-2 py-1 text-lg leading-none text-ink-400 transition hover:bg-rose-50 hover:text-rose-600"
+                >
+                  ×
+                </button>
+              </div>
+            </Field>
+          ) : (
+            <div className="flex items-end">
+              <button
+                onClick={() => setAttachOpen(true)}
+                className="w-full rounded-lg border-2 border-dashed border-ink-300 px-3 py-2 text-left text-sm font-bold text-ink-600 transition hover:border-brand-500 hover:bg-brand-50 hover:text-brand-700"
+              >
+                ＋ Attach customer <span className="text-rose-600">*</span>
+              </button>
+            </div>
+          )}
           <Field label="Fabric">
             <TextInput
               value={form.fabric}

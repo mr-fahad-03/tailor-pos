@@ -11,10 +11,82 @@ import {
   LEDGER_FORM_LABELS,
   type PartyType,
 } from '@/components/LedgerFormModal';
+import { AnchoredDropdown } from '@/components/AnchoredDropdown';
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/components/AuthContext';
 
 export type { PartyType };
+
+/**
+ * The per-row Edit / Delete menu.
+ *
+ * The table scrolls sideways, which makes it a clipping context, so a menu
+ * positioned inside a cell is cut off at the table's edge — on the last row
+ * it was losing Delete entirely. It goes through a portal instead, pinned to
+ * the button, where nothing can crop it.
+ */
+function RowActions({
+  open,
+  onToggle,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (anchorRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      onClose();
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', key);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', key);
+    };
+  }, [open, onClose]);
+
+  return (
+    <div ref={anchorRef} className="inline-block">
+      <button
+        className="btn-success !py-1 !px-2.5 text-[11px]"
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        Actions ▾
+      </button>
+      <AnchoredDropdown anchorRef={anchorRef} panelRef={panelRef} open={open} width={144}>
+        <div className="p-1">
+          <button
+            className="block w-full rounded-lg px-3 py-1.5 text-left text-[13px] hover:bg-brand-50"
+            onClick={onEdit}
+          >
+            Edit
+          </button>
+          <button
+            className="block w-full rounded-lg px-3 py-1.5 text-left text-[13px] text-rose-600 hover:bg-rose-50"
+            onClick={onDelete}
+          >
+            Delete
+          </button>
+        </div>
+      </AnchoredDropdown>
+    </div>
+  );
+}
 
 /** What differs between the Customers screen and the Suppliers one. */
 export interface PartyConfig {
@@ -475,38 +547,20 @@ export function PartyPage({ config }: { config: PartyConfig }) {
                     <tr key={l._id} className="transition hover:bg-brand-50/50">
                       {canManage && (
                         <td className="td">
-                          <div className="relative">
-                            <button
-                              className="btn-success !py-1 !px-2.5 text-[11px]"
-                              onClick={() => setMenuFor(menuFor === l._id ? null : l._id)}
-                              aria-expanded={menuFor === l._id}
-                            >
-                              Actions ▾
-                            </button>
-                            {menuFor === l._id && (
-                              <div className="absolute left-0 z-50 mt-1 w-36 rounded-xl border border-ink-200 bg-white p-1 shadow-lg">
-                                <button
-                                  className="block w-full rounded-lg px-3 py-1.5 text-left text-[13px] hover:bg-brand-50"
-                                  onClick={() => {
-                                    setMenuFor(null);
-                                    setEditing(l);
-                                    setOpen(true);
-                                  }}
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  className="block w-full rounded-lg px-3 py-1.5 text-left text-[13px] text-rose-600 hover:bg-rose-50"
-                                  onClick={() => {
-                                    setMenuFor(null);
-                                    void remove(l);
-                                  }}
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            )}
-                          </div>
+                          <RowActions
+                            open={menuFor === l._id}
+                            onToggle={() => setMenuFor(menuFor === l._id ? null : l._id)}
+                            onClose={() => setMenuFor(null)}
+                            onEdit={() => {
+                              setMenuFor(null);
+                              setEditing(l);
+                              setOpen(true);
+                            }}
+                            onDelete={() => {
+                              setMenuFor(null);
+                              void remove(l);
+                            }}
+                          />
                         </td>
                       )}
                       {shown.map((c) => (

@@ -13,6 +13,7 @@ import { Modal } from './Modal';
 import { LedgerSearchModal } from './LedgerSearchModal';
 import { LedgerSearchInput } from './LedgerSearchInput';
 import { ProductSearchInput } from './ProductSearchInput';
+import { asExpiry, groupDigits, last4, noAutofill } from './SplitTender';
 import { Icon } from '@/components/icons';
 
 interface SaleRow {
@@ -106,6 +107,10 @@ export function SaleForm() {
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [paymentAccount, setPaymentAccount] = useState('');
   const [paymentNote, setPaymentNote] = useState('');
+  /** What goes with a card or a transfer — asked for the moment one is chosen. */
+  const [card, setCard] = useState({ holder: '', number: '', expiry: '', cvc: '' });
+  const [bank, setBank] = useState({ bankName: '', accountName: '', iban: '', swift: '' });
+  const [tenderOpen, setTenderOpen] = useState(false);
 
   const [isReturn, setIsReturn] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -289,6 +294,23 @@ export function SaleForm() {
         discountInput: num(discountInput),
         advanceAmount: calc.paid,
         paymentMethod,
+        // The number and the security code never leave this screen: what is
+        // kept is what identifies the card on a statement, nothing more.
+        ...(paymentMethod === 'card'
+          ? {
+              cardHolder: card.holder.trim(),
+              cardLast4: last4(card.number),
+              cardExpiry: card.expiry.trim(),
+            }
+          : {}),
+        ...(paymentMethod === 'bank'
+          ? {
+              bankName: bank.bankName.trim(),
+              accountName: bank.accountName.trim(),
+              iban: bank.iban.trim(),
+              swift: bank.swift.trim(),
+            }
+          : {}),
         paymentAccount: paymentAccount.trim(),
         paymentNote: paymentNote.trim(),
         paidOn: new Date().toISOString(),
@@ -303,6 +325,13 @@ export function SaleForm() {
       setSaving(false);
     }
   }
+
+  const tenderFilled =
+    paymentMethod === 'card'
+      ? Boolean(card.holder || card.number || card.expiry)
+      : paymentMethod === 'bank'
+        ? Boolean(bank.bankName || bank.accountName || bank.iban)
+        : false;
 
   const customerDue = due ? r2(due.due) : 0;
   /** Money already with the shop reads as an advance, not a debt. */
@@ -427,17 +456,17 @@ export function SaleForm() {
       {/* ------------------------------------------------------ the items */}
       <div className="mt-4 px-4">
         <div className="overflow-x-auto rounded-lg border border-ink-300">
-          <table className="w-full min-w-[980px]">
+          <table className="w-full min-w-[1020px] table-fixed">
             <thead className="bg-ink-50">
               <tr className="text-center">
-                <th className="th-s w-[150px]">Product</th>
-                <th className="th-s w-[220px]">Quantity</th>
-                <th className="th-s w-[180px]">Unit Price</th>
-                <th className="th-s w-[180px]">Discount</th>
-                <th className="th-s w-[90px]">Warranty</th>
-                <th className="th-s w-[170px]">Info</th>
+                <th className="th-s w-[200px]">Product</th>
+                <th className="th-s w-[120px]">Quantity</th>
+                <th className="th-s w-[150px]">Unit Price</th>
+                <th className="th-s w-[150px]">Discount</th>
+                <th className="th-s w-[80px]">Warranty</th>
+                <th className="th-s w-[190px]">Info</th>
                 <th className="th-s w-[110px]">Subtotal</th>
-                <th className="th-s w-[52px]">
+                <th className="th-s w-[50px]">
                   <button
                     onClick={() => setRows([emptyRow()])}
                     title="Clear every line"
@@ -452,20 +481,24 @@ export function SaleForm() {
             <tbody className="divide-y divide-ink-200">
               {rows.map((r, i) => (
                 <tr key={i} className="align-top">
-                  <td className="px-2 py-2 text-center">
+                  <td className="px-2 py-2">
                     {/* Products carry no picture, so the tile stands in for one
-                        and the search sits under it where the name goes. */}
-                    <div className="mx-auto mb-1.5 flex h-9 w-9 items-center justify-center rounded bg-ink-100 text-ink-400">
-                      <Icon name="products" className="h-5 w-5" />
+                        and the search sits beside it where the name goes. */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-ink-100 text-ink-400">
+                        <Icon name="products" className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <ProductSearchInput
+                          value={r.productName}
+                          onChange={(v) => updateRow(i, { productName: v, code: '' })}
+                          onPick={(p) => pickProduct(i, p)}
+                          allowCreate
+                          placeholder="Product"
+                          className=""
+                        />
+                      </div>
                     </div>
-                    <ProductSearchInput
-                      value={r.productName}
-                      onChange={(v) => updateRow(i, { productName: v, code: '' })}
-                      onPick={(p) => pickProduct(i, p)}
-                      allowCreate
-                      placeholder="Product"
-                      className=""
-                    />
                   </td>
 
                   <td className="px-2 py-2">
@@ -480,7 +513,7 @@ export function SaleForm() {
                       <NumberInput
                         value={r.qty}
                         onChange={(e) => updateRow(i, { qty: e.target.value })}
-                        className="!rounded-none text-center"
+                        className="!rounded-none text-left"
                       />
                       <button
                         onClick={() => step(i, 1)}
@@ -490,9 +523,11 @@ export function SaleForm() {
                         +
                       </button>
                     </div>
-                    <p className="mt-1 text-[10px] text-ink-500">
-                      {r.code ? `${fmt(r.stockQty)} ${r.unit} in stock` : ' '}
-                    </p>
+                    {r.code && (
+                      <p className="mt-1 text-[10px] text-ink-500">
+                        {fmt(r.stockQty)} {r.unit} in stock
+                      </p>
+                    )}
                   </td>
 
                   <td className="px-2 py-2">
@@ -539,7 +574,7 @@ export function SaleForm() {
                       onFocus={selectOnFocus}
                       onWheel={blurOnWheel}
                       aria-label="Warranty in months"
-                      className="input text-left tabular-nums"
+                      className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-[12px] tabular-nums text-ink-800 outline-none transition hover:border-ink-300 focus:border-brand-500 focus:bg-white"
                     />
                   </td>
 
@@ -700,7 +735,13 @@ export function SaleForm() {
               </Lead>
               <Select
                 value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setPaymentMethod(next);
+                  // Choosing a card or a transfer is choosing to key in what
+                  // goes with it. Cash and credit have nothing to ask for.
+                  setTenderOpen(next === 'card' || next === 'bank');
+                }}
                 className="!rounded-l-none"
               >
                 <option value="cash">Cash</option>
@@ -709,6 +750,19 @@ export function SaleForm() {
                 <option value="credit">Credit (pay later)</option>
               </Select>
             </div>
+            {(paymentMethod === 'card' || paymentMethod === 'bank') && (
+              <button
+                onClick={() => setTenderOpen(true)}
+                className={`mt-1.5 rounded-lg border px-2 py-1 text-[11px] font-bold transition ${
+                  tenderFilled
+                    ? 'border-brand-600 bg-brand-50 text-brand-800'
+                    : 'border-ink-300 bg-white text-ink-700 hover:border-brand-400 hover:text-brand-700'
+                }`}
+              >
+                {tenderFilled ? '✓ ' : '＋ '}
+                {paymentMethod === 'card' ? 'card' : 'bank'} details
+              </button>
+            )}
           </div>
         </div>
 
@@ -782,6 +836,117 @@ export function SaleForm() {
       </div>
 
       {/* ---------------------------------------------------------- modals */}
+      {/* Asked for the moment a card or a transfer is chosen, in a dialog
+          rather than four more boxes on a screen that already has plenty. */}
+      <Modal
+        open={tenderOpen && (paymentMethod === 'card' || paymentMethod === 'bank')}
+        onClose={() => setTenderOpen(false)}
+        title={paymentMethod === 'card' ? 'Card details' : 'Bank transfer details'}
+        sub={`${fmt(calc.paid)} AED on ${paymentMethod === 'card' ? 'Card' : 'Bank Transfer'}`}
+        footer={
+          <button className="btn-primary" onClick={() => setTenderOpen(false)}>
+            Done
+          </button>
+        }
+      >
+        {paymentMethod === 'card' ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-bold text-ink-600">Card Name</span>
+              <input
+                {...noAutofill}
+                value={card.holder}
+                onChange={(e) => setCard((c) => ({ ...c, holder: e.target.value }))}
+                placeholder="Name on card"
+                className="input"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-bold text-ink-600">
+                Expiry Date on card
+              </span>
+              <input
+                {...noAutofill}
+                value={card.expiry}
+                onChange={(e) => setCard((c) => ({ ...c, expiry: asExpiry(e.target.value) }))}
+                placeholder="MM/YY"
+                inputMode="numeric"
+                className="input tabular-nums"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-bold text-ink-600">Number on card</span>
+              <input
+                {...noAutofill}
+                value={card.number}
+                onChange={(e) => setCard((c) => ({ ...c, number: groupDigits(e.target.value) }))}
+                placeholder="•••• •••• •••• ••••"
+                inputMode="numeric"
+                className="input tabular-nums"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-bold text-ink-600">Security no</span>
+              <input
+                {...noAutofill}
+                value={card.cvc}
+                onChange={(e) =>
+                  setCard((c) => ({ ...c, cvc: e.target.value.replace(/\D/g, '').slice(0, 4) }))
+                }
+                placeholder="•••"
+                inputMode="numeric"
+                className="input tabular-nums"
+              />
+            </label>
+            <p className="text-[11px] leading-snug text-ink-500 sm:col-span-2">
+              Kept with the bill: name, expiry and the last four digits only. The
+              full number and the security code are never stored.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-bold text-ink-600">Bank Name</span>
+              <input
+                value={bank.bankName}
+                onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))}
+                placeholder="e.g. Emirates NBD"
+                className="input"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-bold text-ink-600">Account Name</span>
+              <input
+                value={bank.accountName}
+                onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))}
+                placeholder="Name on the account"
+                className="input"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-bold text-ink-600">
+                IBAN / Account No
+              </span>
+              <input
+                value={bank.iban}
+                onChange={(e) => setBank((b) => ({ ...b, iban: e.target.value.toUpperCase() }))}
+                placeholder="AE00 0000 0000 0000 0000 000"
+                className="input font-mono text-xs"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-bold text-ink-600">SWIFT Number</span>
+              <input
+                value={bank.swift}
+                onChange={(e) => setBank((b) => ({ ...b, swift: e.target.value.toUpperCase() }))}
+                placeholder="e.g. NBADAEAA"
+                className="input font-mono"
+              />
+            </label>
+          </div>
+        )}
+      </Modal>
+
       <LedgerSearchModal
         open={ledgerOpen}
         onClose={() => setLedgerOpen(false)}

@@ -285,6 +285,14 @@ export interface Sale {
   paymentNote?: string;
   paidOn?: string;
   changeReturn?: number;
+  /** Card: never the full number or the security code. */
+  cardHolder?: string;
+  cardLast4?: string;
+  cardExpiry?: string;
+  bankName?: string;
+  accountName?: string;
+  iban?: string;
+  swift?: string;
 }
 
 export interface Page<T> {

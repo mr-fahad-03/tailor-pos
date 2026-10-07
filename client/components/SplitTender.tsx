@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Icon, type IconName } from '@/components/icons';
 import { fmt, num } from '@/lib/format';
 import { blurOnWheel, selectOnFocus } from '@/components/ui';
+import { Modal } from '@/components/Modal';
 import type { SavedBank, SavedCard } from '@/lib/types';
 
 /** The three ways money comes across the counter. */
@@ -56,7 +57,7 @@ export const last4 = (cardNumber: string): string => {
 };
 
 /** Grouped in fours while typing, the way the digits are printed on the card. */
-const groupDigits = (v: string): string =>
+export const groupDigits = (v: string): string =>
   v
     .replace(/\D/g, '')
     .slice(0, 19)
@@ -64,7 +65,7 @@ const groupDigits = (v: string): string =>
     .trim();
 
 /** Nudges a bare `1226` into `12/26` so the stored expiry has one shape. */
-const asExpiry = (v: string): string => {
+export const asExpiry = (v: string): string => {
   const d = v.replace(/\D/g, '').slice(0, 4);
   return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
 };
@@ -80,7 +81,7 @@ const asExpiry = (v: string): string => {
  * the browser, and the vendor attributes for 1Password, LastPass and Dashlane,
  * which each ignore the standard one.
  */
-const noAutofill = {
+export const noAutofill = {
   autoComplete: 'off' as const,
   'data-lpignore': 'true',
   'data-1p-ignore': 'true',
@@ -97,7 +98,7 @@ function Labelled({
 }) {
   return (
     <label className="block">
-      <span className="mb-0.5 block text-[10px] font-bold text-ink-600">{label}</span>
+      <span className="mb-1 block text-[11px] font-bold text-ink-600">{label}</span>
       {children}
     </label>
   );
@@ -111,9 +112,10 @@ function Labelled({
  * are always on show so it is obvious what has been counted, and what is
  * still owed — or owed back — is spelled out rather than left to arithmetic.
  *
- * Card and bank each ask for the details that go with them, and only while
- * that mode is the one being counted: the fields are useless for a cash sale
- * and would be four more boxes to look past.
+ * Card and bank each have details that go with them, behind a press on the
+ * counting row rather than unfolded on arrival: most card payments need no
+ * more than the figure, and four boxes nobody fills in are four boxes in the
+ * way of the ones they do.
  */
 export function SplitTender({
   due,
@@ -146,10 +148,20 @@ export function SplitTender({
   note?: string;
 }) {
   const [mode, setMode] = useState<TenderMode>('cash');
+  /** Card and bank details stay folded away until they are asked for. */
+  const [showDetails, setShowDetails] = useState(false);
 
   const taken = useMemo(() => splitTotal(value), [value]);
   const remaining = Math.max(Math.round((due - taken) * 100) / 100, 0);
   const change = Math.max(Math.round((taken - due) * 100) / 100, 0);
+
+  const cardFilled = Boolean(
+    details.card.holder || details.card.number || details.card.expiry,
+  );
+  const bankFilled = Boolean(
+    details.bank.bankName || details.bank.accountName || details.bank.iban,
+  );
+  const haveDetails = mode === 'card' ? cardFilled : bankFilled;
 
   const set = (m: TenderMode, v: string) => onChange({ ...value, [m]: v });
   const setCard = (k: keyof CardFields, v: string) =>
@@ -170,7 +182,13 @@ export function SplitTender({
               key={m.value}
               type="button"
               disabled={disabled}
-              onClick={() => setMode(m.value)}
+              onClick={() => {
+                setMode(m.value);
+                // Choosing card or bank is choosing to key in what goes with
+                // it, so the dialog is what answers the press. Cash has
+                // nothing to ask for.
+                setShowDetails(m.value !== 'cash');
+              }}
               aria-pressed={on}
               className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition disabled:opacity-50 ${
                 on
@@ -223,165 +241,197 @@ export function SplitTender({
         >
           {fmt(remaining)} AED Remaining
         </span>
+        {/* Four boxes for a card the customer may not even be using is four
+            boxes to look past. They are one press away instead, and the press
+            says whether anything has been filled in yet. */}
+        {mode !== 'cash' && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setShowDetails((o) => !o)}
+            aria-expanded={showDetails}
+            className={`ml-auto shrink-0 rounded-lg border px-2 py-1 text-[11px] font-bold transition disabled:opacity-50 ${
+              haveDetails
+                ? 'border-brand-600 bg-brand-50 text-brand-800'
+                : 'border-ink-300 bg-white text-ink-700 hover:border-brand-400 hover:text-brand-700'
+            }`}
+          >
+            {haveDetails ? '✓ ' : '＋ '}
+            {mode === 'card' ? 'card' : 'bank'} details
+          </button>
+        )}
       </div>
 
-      {/* the details that belong to the tender being counted */}
-      {mode === 'card' && (
-        <div className="mt-2.5 rounded-xl border border-ink-200 bg-white p-2.5">
-          {savedCards.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {savedCards.map((c, i) => (
-                <button
-                  key={c._id ?? i}
-                  type="button"
+      {/* The details belong to the tender, not to the pad: a dialog gives them
+          room to be read off the card in the customer's hand, and keeps the
+          pad itself to the figures. */}
+      <Modal
+        open={showDetails && mode !== 'cash'}
+        onClose={() => setShowDetails(false)}
+        title={mode === 'card' ? 'Card details' : 'Bank transfer details'}
+        sub={`${fmt(num(value[mode]))} AED on ${
+          MODES.find((m) => m.value === mode)?.label
+        }`}
+        footer={
+          <button className="btn-primary" onClick={() => setShowDetails(false)}>
+            Done
+          </button>
+        }
+      >
+        {mode === 'card' ? (
+          <div>
+            {savedCards.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {savedCards.map((c, i) => (
+                  <button
+                    key={c._id ?? i}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() =>
+                      onDetailsChange({
+                        ...details,
+                        // The number is not ours to keep, so a saved card fills
+                        // in everything but that and leaves the box to be typed.
+                        card: {
+                          ...details.card,
+                          holder: c.holder ?? '',
+                          expiry: c.expiry ?? '',
+                        },
+                      })
+                    }
+                    title={`Use ${c.holder || 'this card'} on file`}
+                    className="rounded-full border border-ink-200 px-2.5 py-1 text-[11px] font-bold text-ink-700 transition hover:border-brand-400 hover:text-brand-700 disabled:opacity-50"
+                  >
+                    •••• {c.last4 || '????'}
+                    {c.holder ? ` · ${c.holder}` : ''}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Labelled label="Card Name">
+                <input
+                  {...noAutofill}
+                  value={details.card.holder}
                   disabled={disabled}
-                  onClick={() =>
-                    onDetailsChange({
-                      ...details,
-                      // The number is not ours to keep, so a saved card fills
-                      // in everything but that and leaves the box to be typed.
-                      card: {
-                        ...details.card,
-                        holder: c.holder ?? '',
-                        expiry: c.expiry ?? '',
-                      },
-                    })
-                  }
-                  title={`Use ${c.holder || 'this card'} on file`}
-                  className="rounded-full border border-ink-200 px-2.5 py-1 text-[11px] font-bold text-ink-700 transition hover:border-brand-400 hover:text-brand-700 disabled:opacity-50"
-                >
-                  •••• {c.last4 || '????'}
-                  {c.holder ? ` · ${c.holder}` : ''}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-            <Labelled label="Card Name">
-              <input
-                {...noAutofill}
-                value={details.card.holder}
-                disabled={disabled}
-                onChange={(e) => setCard('holder', e.target.value)}
-                placeholder="Name on card"
-                className="input input-sm"
-              />
-            </Labelled>
-            <Labelled label="Expiry Date on card">
-              <input
-                {...noAutofill}
-                value={details.card.expiry}
-                disabled={disabled}
-                onChange={(e) => setCard('expiry', asExpiry(e.target.value))}
-                placeholder="MM/YY"
-                inputMode="numeric"
-                className="input input-sm tabular-nums"
-              />
-            </Labelled>
-            <Labelled label="Number on card">
-              <input
-                {...noAutofill}
-                value={details.card.number}
-                disabled={disabled}
-                onChange={(e) => setCard('number', groupDigits(e.target.value))}
-                placeholder="•••• •••• •••• ••••"
-                inputMode="numeric"
-                className="input input-sm tabular-nums"
-              />
-            </Labelled>
-            <Labelled label="Security no">
-              <input
-                {...noAutofill}
-                value={details.card.cvc}
-                disabled={disabled}
-                onChange={(e) => setCard('cvc', e.target.value.replace(/\D/g, '').slice(0, 4))}
-                placeholder="•••"
-                inputMode="numeric"
-                className="input input-sm tabular-nums"
-              />
-            </Labelled>
-          </div>
-          <p className="mt-2 text-[10px] leading-snug text-ink-400">
-            Saved against the customer: name, expiry and the last four digits
-            only. The full number and the CVC are never stored.
-          </p>
-        </div>
-      )}
-
-      {mode === 'bank' && (
-        <div className="mt-2.5 rounded-xl border border-ink-200 bg-white p-2.5">
-          {savedBanks.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {savedBanks.map((b, i) => (
-                <button
-                  key={b._id ?? i}
-                  type="button"
+                  onChange={(e) => setCard('holder', e.target.value)}
+                  placeholder="Name on card"
+                  className="input"
+                />
+              </Labelled>
+              <Labelled label="Expiry Date on card">
+                <input
+                  {...noAutofill}
+                  value={details.card.expiry}
                   disabled={disabled}
-                  onClick={() =>
-                    onDetailsChange({
-                      ...details,
-                      bank: {
-                        ...details.bank,
-                        bankName: b.bankName ?? '',
-                        accountName: b.accountName ?? '',
-                        iban: b.iban ?? '',
-                        swift: b.swift ?? '',
-                      },
-                    })
-                  }
-                  title={`Use ${b.bankName || 'this account'} on file`}
-                  className="rounded-full border border-ink-200 px-2.5 py-1 text-[11px] font-bold text-ink-700 transition hover:border-brand-400 hover:text-brand-700 disabled:opacity-50"
-                >
-                  {b.bankName || 'Bank'}
-                  {b.iban ? ` · ${b.iban.slice(-4)}` : ''}
-                </button>
-              ))}
+                  onChange={(e) => setCard('expiry', asExpiry(e.target.value))}
+                  placeholder="MM/YY"
+                  inputMode="numeric"
+                  className="input tabular-nums"
+                />
+              </Labelled>
+              <Labelled label="Number on card">
+                <input
+                  {...noAutofill}
+                  value={details.card.number}
+                  disabled={disabled}
+                  onChange={(e) => setCard('number', groupDigits(e.target.value))}
+                  placeholder="•••• •••• •••• ••••"
+                  inputMode="numeric"
+                  className="input tabular-nums"
+                />
+              </Labelled>
+              <Labelled label="Security no">
+                <input
+                  {...noAutofill}
+                  value={details.card.cvc}
+                  disabled={disabled}
+                  onChange={(e) => setCard('cvc', e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  placeholder="•••"
+                  inputMode="numeric"
+                  className="input tabular-nums"
+                />
+              </Labelled>
             </div>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-            <Labelled label="Bank Name">
-              <input
-                value={details.bank.bankName}
-                disabled={disabled}
-                onChange={(e) => setBank('bankName', e.target.value)}
-                placeholder="e.g. Emirates NBD"
-                className="input input-sm"
-              />
-            </Labelled>
-            <Labelled label="Account Name">
-              <input
-                value={details.bank.accountName}
-                disabled={disabled}
-                onChange={(e) => setBank('accountName', e.target.value)}
-                placeholder="Name on the account"
-                className="input input-sm"
-              />
-            </Labelled>
-            <Labelled label="IBAN / Account No">
-              <input
-                value={details.bank.iban}
-                disabled={disabled}
-                onChange={(e) => setBank('iban', e.target.value.toUpperCase())}
-                placeholder="AE00 0000 0000 0000 0000 000"
-                className="input input-sm font-mono text-xs"
-              />
-            </Labelled>
-            <Labelled label="SWIFT Number">
-              <input
-                value={details.bank.swift}
-                disabled={disabled}
-                onChange={(e) => setBank('swift', e.target.value.toUpperCase())}
-                placeholder="e.g. NBADAEAA"
-                className="input input-sm font-mono"
-              />
-            </Labelled>
+            <p className="mt-3 text-[11px] leading-snug text-ink-500">
+              Saved against the customer: name, expiry and the last four digits
+              only. The full number and the CVC are never stored.
+            </p>
           </div>
-          <p className="mt-2 text-[10px] leading-snug text-ink-400">
-            Saved against the customer, so the next transfer is one tap away.
-          </p>
-        </div>
-      )}
-
+        ) : (
+          <div>
+            {savedBanks.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {savedBanks.map((b, i) => (
+                  <button
+                    key={b._id ?? i}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() =>
+                      onDetailsChange({
+                        ...details,
+                        bank: {
+                          ...details.bank,
+                          bankName: b.bankName ?? '',
+                          accountName: b.accountName ?? '',
+                          iban: b.iban ?? '',
+                          swift: b.swift ?? '',
+                        },
+                      })
+                    }
+                    title={`Use ${b.bankName || 'this account'} on file`}
+                    className="rounded-full border border-ink-200 px-2.5 py-1 text-[11px] font-bold text-ink-700 transition hover:border-brand-400 hover:text-brand-700 disabled:opacity-50"
+                  >
+                    {b.bankName || 'Bank'}
+                    {b.iban ? ` · ${b.iban.slice(-4)}` : ''}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Labelled label="Bank Name">
+                <input
+                  value={details.bank.bankName}
+                  disabled={disabled}
+                  onChange={(e) => setBank('bankName', e.target.value)}
+                  placeholder="e.g. Emirates NBD"
+                  className="input"
+                />
+              </Labelled>
+              <Labelled label="Account Name">
+                <input
+                  value={details.bank.accountName}
+                  disabled={disabled}
+                  onChange={(e) => setBank('accountName', e.target.value)}
+                  placeholder="Name on the account"
+                  className="input"
+                />
+              </Labelled>
+              <Labelled label="IBAN / Account No">
+                <input
+                  value={details.bank.iban}
+                  disabled={disabled}
+                  onChange={(e) => setBank('iban', e.target.value.toUpperCase())}
+                  placeholder="AE00 0000 0000 0000 0000 000"
+                  className="input font-mono text-xs"
+                />
+              </Labelled>
+              <Labelled label="SWIFT Number">
+                <input
+                  value={details.bank.swift}
+                  disabled={disabled}
+                  onChange={(e) => setBank('swift', e.target.value.toUpperCase())}
+                  placeholder="e.g. NBADAEAA"
+                  className="input font-mono"
+                />
+              </Labelled>
+            </div>
+            <p className="mt-3 text-[11px] leading-snug text-ink-500">
+              Saved against the customer, so the next transfer is one tap away.
+            </p>
+          </div>
+        )}
+      </Modal>
       {/* every tender at once, so nothing is counted twice or forgotten */}
       <div className="mt-2.5 grid grid-cols-3 gap-1.5">
         {MODES.map((m) => {

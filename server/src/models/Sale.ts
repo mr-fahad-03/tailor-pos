@@ -63,6 +63,16 @@ export interface ISale extends Document {
   paymentAccount?: string;
   paymentNote?: string;
   paidOn?: Date;
+  /** Enough to find the card on a statement. The number and the security code
+      are never sent here and never stored. */
+  cardHolder?: string;
+  cardLast4?: string;
+  cardExpiry?: string;
+  /** Where a transfer came from. */
+  bankName?: string;
+  accountName?: string;
+  iban?: string;
+  swift?: string;
   /** Handed back when the customer pays more than the bill. */
   changeReturn?: number;
 }
@@ -130,6 +140,13 @@ const saleSchema = new Schema<ISale>(
     paymentAccount: { type: String, trim: true },
     paymentNote: { type: String, trim: true },
     paidOn: { type: Date },
+    cardHolder: { type: String, trim: true },
+    cardLast4: { type: String, trim: true },
+    cardExpiry: { type: String, trim: true },
+    bankName: { type: String, trim: true },
+    accountName: { type: String, trim: true },
+    iban: { type: String, trim: true },
+    swift: { type: String, trim: true },
     changeReturn: { type: Number, default: 0 },
   },
   { timestamps: true },

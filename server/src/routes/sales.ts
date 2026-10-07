@@ -70,6 +70,13 @@ interface SaleBody {
   paymentAccount?: string;
   paymentNote?: string;
   paidOn?: string;
+  cardHolder?: string;
+  cardLast4?: string;
+  cardExpiry?: string;
+  bankName?: string;
+  accountName?: string;
+  iban?: string;
+  swift?: string;
 }
 
 // GET /sales?q=&isReturn=&page=&limit=
@@ -215,6 +222,15 @@ saleRouter.post(
       paymentAccount: body.paymentAccount?.trim(),
       paymentNote: body.paymentNote?.trim(),
       paidOn: body.paidOn ? new Date(body.paidOn) : new Date(),
+      // Only ever the last four. A full number sent in error is dropped here
+      // rather than written to the bill.
+      cardHolder: body.cardHolder?.trim(),
+      cardLast4: body.cardLast4?.replace(/\D/g, '').slice(-4),
+      cardExpiry: body.cardExpiry?.trim(),
+      bankName: body.bankName?.trim(),
+      accountName: body.accountName?.trim(),
+      iban: body.iban?.trim(),
+      swift: body.swift?.trim(),
     });
     res.status(201).json(sale);
   }),
