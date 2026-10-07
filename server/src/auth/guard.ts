@@ -46,6 +46,8 @@ function readToken(req: Request): string | null {
  * every request, so a deactivated account or an edited permission set takes
  * effect immediately rather than when the token eventually expires.
  */
+const authContext: { user?: AuthUser } = {};
+
 export const requireAuth = (req: Request, _res: Response, next: NextFunction): void => {
   const token = readToken(req);
   if (!token) {
@@ -75,13 +77,17 @@ export const requireAuth = (req: Request, _res: Response, next: NextFunction): v
         next(new HttpError(403, 'This account has been deactivated'));
         return;
       }
-      req.user = {
+      authContext.user = {
         id: String(found._id),
         username: found.username,
         name: found.name,
         role: found.role,
         permissions: effectivePermissions(found.role, found.permissions ?? []),
       };
+      Object.defineProperty(req, 'user', {
+        get: () => authContext.user,
+        configurable: true,
+      });
       next();
     })
     .catch(next);

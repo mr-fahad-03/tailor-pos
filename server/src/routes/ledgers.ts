@@ -52,7 +52,7 @@ interface LedgerRow {
  */
 async function withDue<T extends LedgerRow>(rows: T[]): Promise<(T & { due: number })[]> {
   if (!rows.length) return [];
-  const ids = rows.map((r) => r._id);
+  const ids = rows.map((r) => String(r._id));
   const [orders, sales] = await Promise.all([
     JobCard.aggregate([
       { $match: { ledgerId: { $in: ids }, status: { $in: ['open', 'closed'] } } },

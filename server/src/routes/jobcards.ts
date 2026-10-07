@@ -382,6 +382,10 @@ jobCardRouter.put(
       body.advance !== undefined ? r2(num(body.advance)) : paymentsTotal;
     const advSplit = advanceSplit(advance, computed.taxRate);
 
+    if (body.measurements && existing.measurements) {
+      Object.assign(existing.measurements, body.measurements);
+    }
+
     existing.set({
       bookNo: body.bookNo !== undefined ? num(body.bookNo, 270) : existing.bookNo,
       ref: body.ref?.trim() || existing.ref,
@@ -399,7 +403,7 @@ jobCardRouter.put(
       discount: computed.totals.discount,
       tax: computed.totals.tax,
       netAmount: computed.totals.netAmount,
-      measurements: body.measurements ?? existing.measurements,
+      measurements: existing.measurements,
       fabric: body.fabric ?? existing.fabric,
       size: body.size ?? existing.size,
       measurementSets: cleanMeasurementSets(body.measurementSets) ?? existing.measurementSets,
@@ -662,6 +666,8 @@ jobCardRouter.post(
     if (doc.status === 'converted') throw new HttpError(400, 'Order already converted to sales');
     if (doc.status === 'draft')
       throw new HttpError(400, 'This order is still a draft — finish and save it first');
+    if (body.paymentType === 'cash' && doc.netAmount - doc.advance !== 0)
+      throw new HttpError(400, 'Cash conversion requires exact advance payment settlement');
 
     const sale = await convertToSale(doc, body);
     await recordAudit(req, {
