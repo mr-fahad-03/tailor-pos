@@ -725,7 +725,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     setIsNew(false);
   }
 
-  function selectAndFocusItem(i: number, scrollDown = true) {
+  function selectAndFocusItem(i: number, scrollDown = false) {
     let targetUid = items[i]?.personUid ?? '';
 
     if (!targetUid || !sets.some((s) => s.uid === targetUid)) {
@@ -997,11 +997,11 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                         key={i}
                         onClick={(e) => {
                           const el = e.target as HTMLElement;
-                          // Ignore clicks inside Product input, Qty input, Rate input, or Remove button!
-                          if (el.closest('input, select, textarea, button[title="Remove row"]')) {
+                          // Ignore clicks inside Remove button
+                          if (el.closest('button[title="Remove row"]')) {
                             return;
                           }
-                          selectAndFocusItem(i, true);
+                          selectAndFocusItem(i, false);
                         }}
                         className={`transition-all duration-200 cursor-pointer ${
                           isSelected
@@ -1030,10 +1030,22 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                           </div>
                         </td>
                         <td className="td">
-                          <NumberInput value={r.qty} onChange={(e) => updateItem(i, { qty: e.target.value })} disabled={readOnly} className="input-sm" />
+                          <NumberInput
+                            value={r.qty}
+                            onChange={(e) => updateItem(i, { qty: e.target.value })}
+                            onFocus={() => selectAndFocusItem(i, false)}
+                            disabled={readOnly}
+                            className="input-sm"
+                          />
                         </td>
                         <td className="td">
-                          <NumberInput value={r.rate} onChange={(e) => updateItem(i, { rate: e.target.value })} disabled={readOnly} className="input-sm" />
+                          <NumberInput
+                            value={r.rate}
+                            onChange={(e) => updateItem(i, { rate: e.target.value })}
+                            onFocus={() => selectAndFocusItem(i, false)}
+                            disabled={readOnly}
+                            className="input-sm"
+                          />
                         </td>
                         <td className="td">
                           <AttachSizePicker
