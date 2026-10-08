@@ -126,8 +126,13 @@ export function PersonSearchInput({
                 className="flex w-full items-start justify-between gap-3 border-b border-ink-50 px-3 py-2 text-left last:border-b-0 hover:bg-brand-50"
               >
                 <span className="min-w-0">
-                  <span className="block truncate text-[13px] font-bold text-ink-900">
-                    {p.name}
+                  <span className="flex items-center gap-1.5 truncate text-[13px] font-bold text-ink-900">
+                    <span>{p.name}</span>
+                    {p.stitchingStyle ? (
+                      <span className="rounded bg-brand-100/90 px-1.5 py-0.5 text-[11px] font-semibold text-brand-800">
+                        {p.stitchingStyle}
+                      </span>
+                    ) : null}
                   </span>
                   {/* The owner is the whole point: it is what tells two Alis apart. */}
                   <span className="block truncate text-[11px] text-ink-500">

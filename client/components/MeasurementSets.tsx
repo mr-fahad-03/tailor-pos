@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { MEASURE_FIELDS, type MaterialLine, type MeasurementProfile, type MeasurementSet, type Product } from '@/lib/types';
+import { MEASURE_FIELDS, STITCHING_STYLES, type MaterialLine, type MeasurementProfile, type MeasurementSet, type Product } from '@/lib/types';
 import { blurOnWheel, Field, NumberInput, selectOnFocus, TextInput } from '@/components/ui';
 import { ProductSearchInput } from '@/components/ProductSearchInput';
 import { PersonSearchInput } from '@/components/PersonSearchInput';
+import { StitchingStyleSelect } from '@/components/StitchingStyleSelect';
+import { CustomerSizeSearchSelect } from '@/components/CustomerSizeSearchSelect';
 import { fmt, num } from '@/lib/format';
 import { Icon } from '@/components/icons';
 import { useToast } from '@/components/Toast';
@@ -49,6 +51,7 @@ export function fromProfile(p: MeasurementProfile): EditableSet {
   return newSet({
     profileId: p._id,
     name: p.name,
+    stitchingStyle: p.stitchingStyle ?? '',
     fabric: p.fabric ?? '',
     size: p.size ?? '',
     values: { ...p.values },
@@ -176,6 +179,7 @@ export function MeasurementSets({
     patch(uid, {
       profileId: sameCustomer ? p._id : undefined,
       name: p.name,
+      stitchingStyle: p.stitchingStyle ?? '',
       fabric: p.fabric ?? '',
       size: p.size ?? '',
       values: { ...p.values },
@@ -234,6 +238,34 @@ export function MeasurementSets({
     }
   }
 
+  function handleSelectCustomerSize(p: MeasurementProfile) {
+    const activeTarget = activeUid || revealToken?.uid || sets[0]?.uid;
+    if (activeTarget) {
+      applyProfile(activeTarget, p);
+    } else {
+      onChange([fromProfile(p)]);
+    }
+  }
+
+  function handleStitchingStyleChange(uid: string, newStyle: string) {
+    const setItem = sets.find((s) => s.uid === uid);
+    if (setItem && setItem.name.trim() && newStyle) {
+      const match = profiles.find(
+        (p) =>
+          p.name.trim().toLowerCase() === setItem.name.trim().toLowerCase() &&
+          p.stitchingStyle?.trim().toLowerCase() === newStyle.trim().toLowerCase(),
+      );
+      if (match) {
+        applyProfile(uid, match);
+        toast(`Loaded ${match.name}'s saved measurements for ${newStyle}`, 'info');
+        return;
+      }
+    }
+    patch(uid, { stitchingStyle: newStyle });
+  }
+
+  const activeTarget = activeUid || revealToken?.uid || sets[0]?.uid || '';
+  const activeSet = sets.find((s) => s.uid === activeTarget);
   const totalPieces = sets.reduce((n, s) => n + (Number(s.qty) || 0), 0);
 
   return (
@@ -247,51 +279,29 @@ export function MeasurementSets({
               : `${sets.length} ${sets.length === 1 ? 'person' : 'people'} · ${totalPieces} ${totalPieces === 1 ? 'piece' : 'pieces'}`}
           </p>
         </div>
-        {/* Who this customer has on file sits beside Add person, because the
-            two are the same decision: tick somebody already measured, or make
-            a new one. Nothing shows when nobody is saved — an empty panel
-            explaining itself is worth less than the room it takes. */}
+        {/* Who this customer has on file sits beside Add person in a searchable dropdown. */}
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-          {ledgerId && profiles.length > 0 && (
-            <div className="flex flex-wrap items-center justify-end gap-1.5">
-              {profiles.map((p) => {
-                const on = isOnOrder(p);
-                return (
-                  <span
-                    key={p._id}
-                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[12px] font-semibold transition ${
-                      on
-                        ? 'border-brand-600 bg-brand-50 text-brand-800'
-                        : 'border-ink-300 bg-white text-ink-600 hover:border-ink-400'
-                    }`}
-                  >
-                    <label
-                      className="inline-flex cursor-pointer items-center gap-1.5"
-                      title={on ? `${p.name} is on this order` : `Put ${p.name} on this order`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        disabled={readOnly}
-                        onChange={() => toggleProfile(p)}
-                        className="h-3.5 w-3.5 rounded border-ink-300 text-brand-600 focus:ring-brand-500"
-                      />
-                      {p.name}
-                    </label>
-                    {!readOnly && (
-                      <button
-                        onClick={() => forgetProfile(p)}
-                        title={`Remove ${p.name} from this customer`}
-                        aria-label={`Remove ${p.name}`}
-                        className="text-ink-400 transition hover:text-rose-600"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </span>
-                );
-              })}
-            </div>
+          {!readOnly && (
+            <CustomerSizeSearchSelect
+              value={
+                activeSet?.name
+                  ? activeSet.stitchingStyle
+                    ? `${activeSet.name} (${activeSet.stitchingStyle})`
+                    : activeSet.name
+                  : ''
+              }
+              ledgerId={ledgerId}
+              onSelectProfile={(p) => handleSelectCustomerSize(p)}
+              onAddNew={(name) => {
+                if (activeTarget) {
+                  patch(activeTarget, { name });
+                } else {
+                  onChange([...sets, newSet({ name })]);
+                }
+              }}
+              disabled={readOnly}
+              placeholder="Select Customer Size..."
+            />
           )}
           {!readOnly && (
             <button className="btn-soft shrink-0 !py-1.5 text-xs" onClick={() => onChange([...sets, newSet()])}>
@@ -323,18 +333,19 @@ export function MeasurementSets({
               const idx = sets.findIndex((item) => item.uid === s.uid);
               const isShut = collapsed[s.uid];
               const filled = Object.values(s.values).filter(Boolean).length;
+              const isHighlighted = Boolean(activeUid && s.uid && activeUid === s.uid) || flash === s.uid;
               return (
                 <div
                   key={s.uid}
                   id={`person-${s.uid}`}
                   className={`rounded-lg border bg-white transition-all duration-200 ${
-                    activeUid === s.uid || flash === s.uid
+                    isHighlighted
                       ? 'border-emerald-500 ring-2 ring-emerald-400/80 bg-emerald-50/20 shadow-md'
                       : 'border-ink-200'
                   }`}
                 >
                   <div className={`flex flex-wrap items-center gap-2 border-b px-3 py-2.5 transition-colors ${
-                    activeUid === s.uid || flash === s.uid
+                    isHighlighted
                       ? 'border-emerald-200 bg-emerald-50/40'
                       : 'border-ink-100'
                   }`}>
@@ -357,20 +368,33 @@ export function MeasurementSets({
                       </svg>
                     </button>
                     <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded font-mono text-[11px] font-bold transition-colors ${
-                      activeUid === s.uid || flash === s.uid
+                      isHighlighted
                         ? 'bg-emerald-600 text-white shadow-sm'
                         : 'bg-ink-100 text-ink-600'
                     }`}>
                       {idx + 1}
                     </span>
-                  <PersonSearchInput
-                    value={s.name}
-                    onChange={(v) => patch(s.uid, { name: v })}
-                    onPick={(p) => applyProfile(s.uid, p)}
-                    ledgerId={ledgerId}
-                    disabled={readOnly}
-                    className="input input-sm w-full !border-transparent !bg-transparent font-semibold hover:!border-ink-300 focus:!border-brand-500 focus:!bg-white"
-                  />
+                  <div className="flex flex-1 items-center gap-2 min-w-0">
+                    <div className="w-1/2 min-w-[140px]">
+                      <PersonSearchInput
+                        value={s.name}
+                        onChange={(v) => patch(s.uid, { name: v })}
+                        onPick={(p) => applyProfile(s.uid, p)}
+                        ledgerId={ledgerId}
+                        disabled={readOnly}
+                        placeholder="Person's name — type to find saved measurements"
+                        className="input input-sm w-full !border-transparent !bg-transparent font-semibold hover:!border-ink-300 focus:!border-brand-500 focus:!bg-white"
+                      />
+                    </div>
+                    <div className="w-1/2 min-w-[150px]">
+                      <StitchingStyleSelect
+                        value={s.stitchingStyle ?? ''}
+                        onChange={(val) => handleStitchingStyleChange(s.uid, val)}
+                        disabled={readOnly}
+                        placeholder="Select Stitching Style..."
+                      />
+                    </div>
+                  </div>
                   <span className="hidden text-[11px] font-medium text-ink-400 sm:inline">
                     {filled}/{MEASURE_FIELDS.length}
                   </span>

@@ -79,6 +79,7 @@ export interface IJobCard extends Document {
     uid?: string;
     profileId?: string;
     name: string;
+    stitchingStyle?: string;
     /** Blank unless asked for — there is no sensible default age. */
     age?: number | null;
     fabric?: string;
@@ -181,6 +182,7 @@ const jobCardSchema = new Schema<IJobCard>(
             uid: { type: String },
             profileId: { type: String },
             name: { type: String, required: true, trim: true },
+            stitchingStyle: { type: String, trim: true },
             age: { type: Number, default: null, min: 0 },
             fabric: { type: String, trim: true },
             size: { type: String, trim: true },

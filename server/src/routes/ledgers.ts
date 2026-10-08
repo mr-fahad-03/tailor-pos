@@ -312,6 +312,9 @@ ledgerRouter.put(
     const given = body.contactId === undefined ? undefined : String(body.contactId ?? '').trim();
     if (given && (await Ledger.exists({ contactId: given, _id: { $ne: req.params.id } })))
       throw new HttpError(400, `Contact ID "${given}" is already in use`);
+    const phone = body.phone === undefined ? undefined : String(body.phone ?? '').trim();
+    if (phone && (await Ledger.exists({ phone, _id: { $ne: req.params.id } })))
+      throw new HttpError(400, `Phone number "${phone}" is already registered to another customer!`);
     const ledger = await Ledger.findByIdAndUpdate(
       req.params.id,
       {

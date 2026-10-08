@@ -6,11 +6,14 @@ import { AnchoredDropdown } from '@/components/AnchoredDropdown';
 export interface AttachablePerson {
   uid: string;
   name: string;
+  stitchingStyle?: string;
 }
 
 /** What a person is called in the picker before anyone has typed their name. */
-export const personLabel = (p: AttachablePerson, i: number) =>
-  p.name.trim() || `Person ${i + 1}`;
+export const personLabel = (p: AttachablePerson, i: number) => {
+  const cleanName = p.name.trim() || `Person ${i + 1}`;
+  return p.stitchingStyle?.trim() ? `${cleanName} (${p.stitchingStyle.trim()})` : cleanName;
+};
 
 /**
  * Says which person's measurements an order line is stitched to, and lets
@@ -51,10 +54,11 @@ export function AttachSizePicker({
     return () => document.removeEventListener('mousedown', fn);
   }, []);
 
-  // A person who has since been deleted leaves the line unattached rather
-  // than naming somebody who is no longer on the order.
+  // A person who has since been deleted or has no name typed yet leaves the line unattached
   const at = people.findIndex((p) => p.uid === value);
-  const attached = at >= 0 ? personLabel(people[at], at) : null;
+  const targetPerson = at >= 0 ? people[at] : null;
+  const styleSuffix = targetPerson?.stitchingStyle?.trim() ? ` (${targetPerson.stitchingStyle.trim()})` : '';
+  const attached = targetPerson && targetPerson.name.trim() ? `${targetPerson.name.trim()}${styleSuffix}` : null;
 
   return (
     <div ref={anchorRef} className="relative flex items-center justify-center gap-1.5">

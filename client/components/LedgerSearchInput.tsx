@@ -15,6 +15,7 @@ import type { Ledger } from '@/lib/types';
  */
 export function LedgerSearchInput({
   value,
+  phone,
   onChange,
   onPick,
   onCreate,
@@ -24,6 +25,7 @@ export function LedgerSearchInput({
   className = '',
 }: {
   value: string;
+  phone?: string;
   onChange: (v: string) => void;
   onPick: (l: Ledger) => void;
   /** Offered at the foot of the list when the typed name is on nobody's file. */
@@ -82,7 +84,7 @@ export function LedgerSearchInput({
   }
 
   return (
-    <div ref={wrapRef} className="relative w-full min-w-0">
+    <div ref={wrapRef} className="relative flex items-center w-full min-w-0">
       <input
         value={value}
         placeholder={placeholder}
@@ -105,8 +107,14 @@ export function LedgerSearchInput({
             create();
           }
         }}
-        className={`input ${className}`}
+        className={`input w-full ${phone ? 'pr-36' : ''} ${className}`}
       />
+      {phone && (
+        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none flex items-center gap-1 rounded bg-brand-50/90 px-2 py-0.5 font-mono text-xs font-bold text-brand-700 border border-brand-200/60 shadow-xs">
+          <span>📞</span>
+          <span>{phone}</span>
+        </div>
+      )}
       <AnchoredDropdown
         anchorRef={wrapRef}
         panelRef={panelRef}
@@ -140,9 +148,9 @@ export function LedgerSearchInput({
                 <button
                   type="button"
                   onClick={create}
-                  className="inline-flex shrink-0 items-center gap-1 rounded bg-brand-600 px-2.5 py-1 text-[12px] font-bold text-white transition hover:bg-brand-700"
+                  className="inline-flex shrink-0 items-center gap-1 rounded bg-emerald-700 px-2.5 py-1 text-[12px] font-bold text-white transition hover:bg-emerald-800 shadow-sm"
                 >
-                  ＋ Add New
+                  + Add New
                 </button>
               )}
             </div>

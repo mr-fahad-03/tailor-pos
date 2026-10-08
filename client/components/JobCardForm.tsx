@@ -150,12 +150,12 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
   const [items, setItems] = useState<ItemRow[]>(() =>
     initial?.items?.length
       ? initial.items.map((i) => ({
-          code: i.code ?? '',
-          productName: i.productName ?? '',
-          qty: String(i.qty ?? ''),
-          rate: String(i.rate ?? ''),
-          personUid: i.personUid ?? '',
-        }))
+        code: i.code ?? '',
+        productName: i.productName ?? '',
+        qty: String(i.qty ?? ''),
+        rate: String(i.rate ?? ''),
+        personUid: i.personUid ?? '',
+      }))
       // Unattached until somebody says who it is being stitched for. Guessing
       // the first person is right often enough to be trusted and wrong often
       // enough to cut a garment to the wrong size.
@@ -322,12 +322,12 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     setItems(
       d.items.length
         ? d.items.map((i) => ({
-            code: i.code ?? '',
-            productName: i.productName ?? '',
-            qty: String(i.qty),
-            rate: String(i.rate),
-            personUid: i.personUid ?? '',
-          }))
+          code: i.code ?? '',
+          productName: i.productName ?? '',
+          qty: String(i.qty),
+          rate: String(i.rate),
+          personUid: i.personUid ?? '',
+        }))
         : [emptyItem()],
     );
     setDiscount(String(d.discount));
@@ -380,6 +380,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         // who to leave off, for a one-off nobody wants on the books.
         remember: m.remember !== false,
         name: m.name.trim(),
+        stitchingStyle: m.stitchingStyle,
         age: m.age ?? null,
         fabric: m.fabric,
         size: m.size,
@@ -432,6 +433,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
             api.measurements.save({
               ledgerId,
               name: m.name.trim(),
+              stitchingStyle: m.stitchingStyle,
               fabric: m.fabric,
               size: m.size,
               values: m.values,
@@ -645,18 +647,18 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
         // whole number on the wire. The CVC never leaves this component.
         ...(b.mode === 'card'
           ? {
-              cardHolder: card.holder,
-              cardLast4: last4(card.number),
-              cardExpiry: card.expiry,
-            }
+            cardHolder: card.holder,
+            cardLast4: last4(card.number),
+            cardExpiry: card.expiry,
+          }
           : {}),
         ...(b.mode === 'bank'
           ? {
-              bank: bankT.bankName,
-              accountName: bankT.accountName,
-              iban: bankT.iban,
-              swift: bankT.swift,
-            }
+            bank: bankT.bankName,
+            accountName: bankT.accountName,
+            iban: bankT.iban,
+            swift: bankT.swift,
+          }
           : {}),
       });
     }
@@ -675,13 +677,13 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
             : {}),
           ...(usedBank
             ? {
-                bank: {
-                  bankName: bankT.bankName,
-                  accountName: bankT.accountName,
-                  iban: bankT.iban,
-                  swift: bankT.swift,
-                },
-              }
+              bank: {
+                bankName: bankT.bankName,
+                accountName: bankT.accountName,
+                iban: bankT.iban,
+                swift: bankT.swift,
+              },
+            }
             : {}),
         });
         setSavedCards(saved.savedCards ?? []);
@@ -883,6 +885,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   <div className="flex-1">
                     <LedgerSearchInput
                       value={partyName}
+                      phone={phone}
                       onChange={(v) => {
                         setPartyName(v);
                         setLedgerId('');
@@ -910,14 +913,12 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
                 {due && priorDue !== 0 && (
                   <p
-                    className={`mt-1 text-[11px] font-bold ${
-                      priorDue > 0 ? 'text-rose-600' : 'text-brand-700'
-                    }`}
+                    className={`mt-1 text-[11px] font-bold ${priorDue > 0 ? 'text-rose-600' : 'text-brand-700'
+                      }`}
                     title={
                       priorDue > 0
-                        ? `Opening ${fmt(due.openingBalance)} + unpaid orders ${fmt(due.orderDue)} + unpaid bills ${fmt(due.saleDue)}${
-                            mode === 'edit' ? ', less this order' : ''
-                          }`
+                        ? `Opening ${fmt(due.openingBalance)} + unpaid orders ${fmt(due.orderDue)} + unpaid bills ${fmt(due.saleDue)}${mode === 'edit' ? ', less this order' : ''
+                        }`
                         : 'This customer has paid ahead'
                     }
                   >
@@ -1003,11 +1004,10 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                           }
                           selectAndFocusItem(i, false);
                         }}
-                        className={`transition-all duration-200 cursor-pointer ${
-                          isSelected
+                        className={`transition-all duration-200 cursor-pointer ${isSelected
                             ? 'bg-emerald-100/90 text-emerald-950 font-semibold ring-2 ring-emerald-500/80 shadow-md border-l-4 border-emerald-600'
                             : 'hover:bg-emerald-50/60'
-                        } ${freshItem === i ? 'bg-brand-50' : ''}`}
+                          } ${freshItem === i ? 'bg-brand-50' : ''}`}
                       >
                         <td className="td text-ink-400">{i + 1}</td>
                         <td className="td">
@@ -1139,9 +1139,8 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               <p className="flex items-baseline gap-2">
                 <span className="text-sm font-black text-rose-600">Margin:</span>
                 <span
-                  className={`text-xl font-black tabular-nums ${
-                    margin < 0 ? 'text-rose-600' : 'text-ink-900'
-                  }`}
+                  className={`text-xl font-black tabular-nums ${margin < 0 ? 'text-rose-600' : 'text-ink-900'
+                    }`}
                 >
                   {fmt(margin)} <span className="text-xs">AED</span>
                 </span>

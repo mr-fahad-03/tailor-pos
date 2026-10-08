@@ -160,8 +160,8 @@ export function ProductSearchInput({
               <span className="truncate font-semibold text-rose-600">
                 “{typed}” Not Available
               </span>
-              <span className="inline-flex shrink-0 items-center gap-1 rounded bg-brand-600 px-2 py-0.5 font-bold text-white shadow-sm hover:bg-brand-700">
-                ＋ Add New
+              <span className="inline-flex shrink-0 items-center gap-1 rounded bg-emerald-700 px-2.5 py-1 font-bold text-white shadow-sm hover:bg-emerald-800 transition-colors">
+                + Add New
               </span>
             </button>
           )}

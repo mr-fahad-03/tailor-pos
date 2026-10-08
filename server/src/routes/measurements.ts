@@ -67,7 +67,18 @@ measurementRouter.get(
 
     const search = String(q ?? '').trim();
     if (search) {
-      filter.name = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      const rx = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      const matchingLedgers = await Ledger.find({
+        $or: [{ name: rx }, { phone: rx }],
+      }).select('_id').lean();
+
+      const ledgerIds = matchingLedgers.map((l) => l._id);
+
+      filter.$or = [
+        { name: rx },
+        { stitchingStyle: rx },
+        { ledgerId: { $in: ledgerIds } },
+      ];
     }
 
     // One customer's list is short; the global one is paged.
@@ -92,17 +103,25 @@ measurementRouter.post(
   '/',
   requirePerm('jobcards.create'),
   asyncHandler(async (req, res) => {
-    const { ledgerId, name, fabric, size, note } = req.body ?? {};
+    const { ledgerId, name, stitchingStyle, fabric, size, note } = req.body ?? {};
     if (!ledgerId || !Types.ObjectId.isValid(String(ledgerId))) {
       throw new HttpError(400, 'Pick a customer before saving measurements');
     }
     const clean = String(name ?? '').trim();
     if (!clean) throw new HttpError(400, 'Give this person a name');
+    const cleanStyle = stitchingStyle ? String(stitchingStyle).trim() : '';
+
+    const filter = {
+      ledgerId,
+      name: clean,
+      stitchingStyle: cleanStyle,
+    };
 
     const doc = await MeasurementProfile.findOneAndUpdate(
-      { ledgerId, name: clean },
+      filter,
       {
         $set: {
+          stitchingStyle: cleanStyle,
           fabric,
           size,
           note,

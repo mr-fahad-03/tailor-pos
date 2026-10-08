@@ -66,6 +66,7 @@ function cleanMeasurementSets(input: JobCardBody['measurementSets'], partyName?:
         uid: (set as { uid?: string })?.uid || undefined,
         profileId: validObjectIdStr(set?.profileId),
         name,
+        stitchingStyle: set?.stitchingStyle ? String(set.stitchingStyle).trim() : undefined,
         age,
         fabric: set?.fabric,
         size: set?.size,
@@ -141,6 +142,7 @@ interface JobCardBody {
     uid?: string;
     profileId?: string;
     name?: string;
+    stitchingStyle?: string;
     age?: number | null;
     fabric?: string;
     size?: string;
@@ -209,10 +211,16 @@ async function filePeople(
         const str = String(v ?? '').trim();
         if (str) values[k] = str;
       }
+      const stitchingStyle = m.stitchingStyle ? String(m.stitchingStyle).trim() : '';
+      const filter = {
+        ledgerId: validLedgerId,
+        name,
+        stitchingStyle,
+      };
       return MeasurementProfile.findOneAndUpdate(
-        { ledgerId: validLedgerId, name },
+        filter,
         {
-          $set: { values, archived: false, lastUsedAt: new Date() },
+          $set: { values, stitchingStyle, archived: false, lastUsedAt: new Date() },
           $setOnInsert: { ledgerId: validLedgerId, name },
         },
         { upsert: true, runValidators: true },

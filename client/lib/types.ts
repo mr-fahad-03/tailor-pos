@@ -151,12 +151,25 @@ export interface MaterialLine {
   rate: number;
 }
 
+export const STITCHING_STYLES = [
+  'Emirati Style',
+  'Saudi Style',
+  'Qatari Style',
+  'Kuwaiti Style',
+  'Omani Style',
+  'Mariki Style',
+  'Classic Style',
+  'Modern Cut',
+  'Custom Style',
+] as const;
+
 /** One person being stitched for on an order. */
 export interface MeasurementSet {
   /** Stable across saves, so an order line can point at this person. */
   uid?: string;
   profileId?: string;
   name: string;
+  stitchingStyle?: string;
   /** Null unless asked for — there is no sensible default age. */
   age?: number | null;
   fabric?: string;
@@ -172,6 +185,7 @@ export interface MeasurementProfile {
   _id: string;
   ledgerId: string;
   name: string;
+  stitchingStyle?: string;
   fabric?: string;
   size?: string;
   values: Record<string, string>;
