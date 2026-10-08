@@ -17,6 +17,7 @@ export function AnchoredDropdown({
   anchorRef,
   open,
   width = 288,
+  direction = 'down',
   children,
   panelRef,
 }: {
@@ -24,6 +25,8 @@ export function AnchoredDropdown({
   open: boolean;
   /** Preferred width in px; trimmed to fit narrow screens. */
   width?: number;
+  /** 'down' forces the panel to strictly open downwards below the anchor. */
+  direction?: 'down' | 'auto';
   children: React.ReactNode;
   /** So the owner can tell a click on the panel from a click outside it. */
   panelRef?: React.RefObject<HTMLDivElement>;
@@ -61,8 +64,8 @@ export function AnchoredDropdown({
       const left = Math.max(gutter, Math.min(r.left, window.innerWidth - w - gutter));
       const below = window.innerHeight - r.bottom;
       const above = r.top;
-      // Flip above when there is more room there than below.
-      const flip = below < 220 && above > below;
+      // Strictly open downwards by default unless direction is set to 'auto'.
+      const flip = direction === 'auto' && below < 220 && above > below;
       // Never taller than the room it has, so the last row is always reachable.
       const maxHeight = Math.max(120, (flip ? above : below) - gutter * 2);
       setBox(
@@ -80,7 +83,7 @@ export function AnchoredDropdown({
       window.removeEventListener('scroll', place, true);
       window.removeEventListener('resize', place);
     };
-  }, [open, mounted, anchorRef, width]);
+  }, [open, mounted, anchorRef, width, direction]);
 
   if (!open || !mounted || !box) return null;
 
