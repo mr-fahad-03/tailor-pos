@@ -61,7 +61,7 @@ export function AttachSizePicker({
   const attached = targetPerson && targetPerson.name.trim() ? `${targetPerson.name.trim()}${styleSuffix}` : null;
 
   return (
-    <div ref={anchorRef} className="relative flex items-center justify-center gap-1.5">
+    <div ref={anchorRef} className="relative flex items-center justify-center gap-1.5 max-w-full min-w-0 px-1">
       {/* An attached line is read far more often than it is re-pointed, so the
           words themselves go to the measurements they name, and changing the
           attachment sits behind the caret beside them. An unattached line has
@@ -77,7 +77,7 @@ export function AttachSizePicker({
               ? `Go to ${attached}'s measurements`
               : 'Click to attach this line to somebody on the order'
         }
-        className={`min-w-0 truncate text-center text-[11px] font-bold transition disabled:cursor-default ${
+        className={`min-w-0 flex-1 truncate text-center text-[11px] font-bold transition disabled:cursor-default ${
           attached
             ? 'text-blue-700 hover:text-blue-900 hover:underline'
             : 'text-rose-600 hover:text-rose-800'
@@ -85,14 +85,14 @@ export function AttachSizePicker({
       >
         {attached ? `${attached} size attached` : 'Order Size Not Attached'}
       </button>
-      {attached && !disabled && (
+      {!disabled && (
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
             setOpen((o) => !o);
           }}
-          title="Attach this line to somebody else"
+          title={attached ? 'Attach this line to somebody else' : 'Attach a size to this line'}
           aria-label="Change the attached person"
           aria-haspopup="listbox"
           className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-ink-200 text-ink-500 transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700"

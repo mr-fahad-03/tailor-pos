@@ -383,7 +383,7 @@ export function MeasurementSets({
                         ledgerId={ledgerId}
                         disabled={readOnly}
                         placeholder="Person's name — type to find saved measurements"
-                        className="input input-sm w-full !border-transparent !bg-transparent font-semibold hover:!border-ink-300 focus:!border-brand-500 focus:!bg-white"
+                        className="input input-sm w-full font-semibold text-xs text-ink-800 bg-white border border-ink-300 hover:border-brand-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 rounded-lg shadow-sm"
                       />
                     </div>
                     <div className="w-1/2 min-w-[150px]">

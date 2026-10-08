@@ -738,9 +738,6 @@ export function SaleForm() {
                 onChange={(e) => {
                   const next = e.target.value;
                   setPaymentMethod(next);
-                  // Choosing a card or a transfer is choosing to key in what
-                  // goes with it. Cash and credit have nothing to ask for.
-                  setTenderOpen(next === 'card' || next === 'bank');
                 }}
                 className="!rounded-l-none"
               >

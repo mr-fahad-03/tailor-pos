@@ -184,10 +184,6 @@ export function SplitTender({
               disabled={disabled}
               onClick={() => {
                 setMode(m.value);
-                // Choosing card or bank is choosing to key in what goes with
-                // it, so the dialog is what answers the press. Cash has
-                // nothing to ask for.
-                setShowDetails(m.value !== 'cash');
               }}
               aria-pressed={on}
               className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition disabled:opacity-50 ${

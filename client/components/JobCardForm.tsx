@@ -736,14 +736,8 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
 
       if (freeSet) {
         targetUid = freeSet.uid;
-        if (!freeSet.name.trim() && items[i]?.productName?.trim()) {
-          setSets((prev) =>
-            prev.map((s) => (s.uid === freeSet.uid ? { ...s, name: items[i].productName.trim() } : s)),
-          );
-        }
       } else {
-        const setName = items[i]?.productName?.trim() || `Person ${sets.length + 1}`;
-        const fresh = newSet({ name: setName });
+        const fresh = newSet();
         targetUid = fresh.uid;
         setSets((prev) => [...prev, fresh]);
       }
@@ -974,17 +968,17 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               )}
             </div>
             <div className="overflow-x-auto rounded-xl border border-ink-200">
-              <table className="w-full">
+              <table className="w-full table-fixed">
                 <thead className="bg-ink-50">
                   <tr>
-                    <th className="th w-10">Sl</th>
+                    <th className="th w-10 text-center">Sl</th>
                     <th className="th">Product</th>
                     <th className="th w-20 text-right">Qty</th>
                     <th className="th w-24 text-right">Rate</th>
                     {/* Not shouted like the figures either side of it: this
                         column is a statement about the row, not a heading
                         over a number. */}
-                    <th className="th w-36 text-center normal-case tracking-normal">Attach Size</th>
+                    <th className="th w-44 text-center normal-case tracking-normal">Attach Size</th>
                     <th className="th w-24 text-right">Amount</th>
                     {!readOnly && <th className="th w-10" />}
                   </tr>
@@ -1009,9 +1003,9 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                             : 'hover:bg-emerald-50/60'
                           } ${freshItem === i ? 'bg-brand-50' : ''}`}
                       >
-                        <td className="td text-ink-400">{i + 1}</td>
+                        <td className="td w-10 text-center text-ink-400 font-mono text-xs">{i + 1}</td>
                         <td className="td">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 overflow-hidden">
                             {r.code && (
                               <span className="shrink-0 rounded bg-ink-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-brand-700">
                                 {r.code}
@@ -1029,7 +1023,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                             />
                           </div>
                         </td>
-                        <td className="td">
+                        <td className="td w-20">
                           <NumberInput
                             value={r.qty}
                             onChange={(e) => updateItem(i, { qty: e.target.value })}
@@ -1038,7 +1032,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                             className="input-sm"
                           />
                         </td>
-                        <td className="td">
+                        <td className="td w-24">
                           <NumberInput
                             value={r.rate}
                             onChange={(e) => updateItem(i, { rate: e.target.value })}
@@ -1047,7 +1041,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                             className="input-sm"
                           />
                         </td>
-                        <td className="td">
+                        <td className="td w-44 text-center overflow-hidden">
                           <AttachSizePicker
                             people={sets}
                             value={r.personUid}
@@ -1061,9 +1055,9 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                             disabled={readOnly}
                           />
                         </td>
-                        <td className="td text-right font-bold tabular-nums">{fmt(c?.amount ?? 0)}</td>
+                        <td className="td w-24 text-right font-bold tabular-nums">{fmt(c?.amount ?? 0)}</td>
                         {!readOnly && (
-                          <td className="td">
+                          <td className="td w-10 text-center">
                             <button
                               className="text-rose-500 hover:text-rose-700"
                               onClick={() => setItems((rows) => rows.filter((_, idx) => idx !== i))}
