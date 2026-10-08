@@ -16,6 +16,7 @@ import type { MeasurementProfile } from '@/lib/types';
  * someone else's measurements is nearly always a mistake.
  */
 export function PersonSearchInput({
+  id,
   value,
   onChange,
   onPick,
@@ -24,6 +25,7 @@ export function PersonSearchInput({
   className = '',
   placeholder = "Person's name — type to find saved measurements",
 }: {
+  id?: string;
   value: string;
   onChange: (v: string) => void;
   onPick: (p: MeasurementProfile) => void;
@@ -94,10 +96,18 @@ export function PersonSearchInput({
   return (
     <div ref={wrapRef} className="relative min-w-0 flex-1">
       <input
+        id={id}
         value={value}
         placeholder={placeholder}
         disabled={disabled}
         aria-label="Person's name"
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
+        data-lpignore="true"
+        data-1p-ignore="true"
+        data-form-type="other"
+        data-bwignore="true"
         onChange={(e) => {
           onChange(e.target.value);
           setOpen(true);

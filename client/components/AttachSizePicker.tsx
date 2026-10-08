@@ -1,8 +1,5 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { AnchoredDropdown } from '@/components/AnchoredDropdown';
-
 export interface AttachablePerson {
   uid: string;
   name: string;
@@ -17,13 +14,7 @@ export const personLabel = (p: AttachablePerson, i: number) => {
 
 /**
  * Says which person's measurements an order line is stitched to, and lets
- * that be changed.
- *
- * Order lines and people used to be bound by position alone — row 1 to the
- * first person, row 2 to the second — which is invisible and wrong the moment
- * a line is an alteration charge rather than a garment. The link is stated
- * here instead, in words, on the row it belongs to: either whose size is
- * attached, or that none is.
+ * that be changed. Clicking the line reveals and focuses their measurement input.
  */
 export function AttachSizePicker({
   people,
@@ -40,42 +31,25 @@ export function AttachSizePicker({
   onReveal?: (uid: string) => void;
   disabled?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const anchorRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const fn = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (anchorRef.current?.contains(t) || panelRef.current?.contains(t)) return;
-      setOpen(false);
-    };
-    document.addEventListener('mousedown', fn);
-    return () => document.removeEventListener('mousedown', fn);
-  }, []);
-
-  // A person who has since been deleted or has no name typed yet leaves the line unattached
   const at = people.findIndex((p) => p.uid === value);
   const targetPerson = at >= 0 ? people[at] : null;
   const styleSuffix = targetPerson?.stitchingStyle?.trim() ? ` (${targetPerson.stitchingStyle.trim()})` : '';
   const attached = targetPerson && targetPerson.name.trim() ? `${targetPerson.name.trim()}${styleSuffix}` : null;
 
   return (
-    <div ref={anchorRef} className="relative flex items-center justify-center gap-1.5 max-w-full min-w-0 px-1">
-      {/* An attached line is read far more often than it is re-pointed, so the
-          words themselves go to the measurements they name, and changing the
-          attachment sits behind the caret beside them. An unattached line has
-          nowhere to go, so the words open the list instead. */}
+    <div className="relative flex items-center justify-center gap-1.5 max-w-full min-w-0 px-1">
       <button
         type="button"
         disabled={disabled}
-        onClick={() => (attached && onReveal ? onReveal(value) : setOpen((o) => !o))}
+        onClick={() => {
+          if (onReveal) onReveal(value);
+        }}
         title={
           disabled
             ? undefined
             : attached
               ? `Go to ${attached}'s measurements`
-              : 'Click to attach this line to somebody on the order'
+              : 'Click to go to measurements for this line'
         }
         className={`min-w-0 flex-1 truncate text-center text-[11px] font-bold transition disabled:cursor-default ${
           attached
@@ -85,68 +59,20 @@ export function AttachSizePicker({
       >
         {attached ? `${attached} size attached` : 'Order Size Not Attached'}
       </button>
-      {!disabled && (
+      {attached && !disabled && (
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            setOpen((o) => !o);
+            onChange('');
           }}
-          title={attached ? 'Attach this line to somebody else' : 'Attach a size to this line'}
-          aria-label="Change the attached person"
-          aria-haspopup="listbox"
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-ink-200 text-ink-500 transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700"
+          title="Detach size from this line"
+          aria-label="Detach size"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-rose-200 bg-rose-50/50 text-[11px] font-bold text-rose-600 transition hover:border-rose-400 hover:bg-rose-100 hover:text-rose-800"
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-2.5 w-2.5"
-          >
-            <path d="m6 9 6 6 6-6" />
-          </svg>
+          ✕
         </button>
       )}
-
-      <AnchoredDropdown anchorRef={anchorRef} panelRef={panelRef} open={open && !disabled} width={240}>
-        <>
-          {people.length === 0 ? (
-            <p className="px-3 py-2 text-[13px] text-ink-500">
-              Nobody on this order yet — add a person under Measurements.
-            </p>
-          ) : (
-            people.map((p, i) => (
-              <button
-                key={p.uid}
-                type="button"
-                onClick={() => {
-                  onChange(p.uid);
-                  setOpen(false);
-                }}
-                className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[13px] hover:bg-brand-50 ${
-                  p.uid === value ? 'font-bold text-brand-700' : 'text-ink-700'
-                }`}
-              >
-                {personLabel(p, i)}
-                {p.uid === value && <span aria-hidden>✓</span>}
-              </button>
-            ))
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              onChange('');
-              setOpen(false);
-            }}
-            className="w-full border-t border-ink-100 px-3 py-2 text-left text-[13px] text-rose-600 hover:bg-rose-50"
-          >
-            Not attached
-          </button>
-        </>
-      </AnchoredDropdown>
     </div>
   );
 }

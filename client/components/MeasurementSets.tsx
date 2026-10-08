@@ -96,6 +96,11 @@ export function MeasurementSets({
       if (container) {
         container.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
+      const nameInput = document.getElementById(`person-name-input-${uid}`) as HTMLInputElement | null;
+      if (nameInput) {
+        nameInput.focus();
+        nameInput.select();
+      }
     }, 60);
     const off = setTimeout(() => setFlash(''), 3000);
     return () => {
@@ -377,6 +382,7 @@ export function MeasurementSets({
                   <div className="flex flex-1 items-center gap-2 min-w-0">
                     <div className="w-1/2 min-w-[140px]">
                       <PersonSearchInput
+                        id={`person-name-input-${s.uid}`}
                         value={s.name}
                         onChange={(v) => patch(s.uid, { name: v })}
                         onPick={(p) => applyProfile(s.uid, p)}

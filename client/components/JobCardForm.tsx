@@ -859,7 +859,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 referenced by, then the book it came out of and its dates. */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-12">
               <div className="col-span-2 sm:col-span-7">
-                <div className="mb-1 flex items-center justify-between">
+                <div className="mb-1 flex h-7 items-center justify-between">
                   <label className="label mb-0">CUSTOMER NAME</label>
                   {canAddLedger && (
                     <button
@@ -905,26 +905,32 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                   )}
                 </div>
 
-                {due && priorDue !== 0 && (
-                  <p
-                    className={`mt-1 text-[11px] font-bold ${priorDue > 0 ? 'text-rose-600' : 'text-brand-700'
-                      }`}
-                    title={
-                      priorDue > 0
-                        ? `Opening ${fmt(due.openingBalance)} + unpaid orders ${fmt(due.orderDue)} + unpaid bills ${fmt(due.saleDue)}${mode === 'edit' ? ', less this order' : ''
-                        }`
-                        : 'This customer has paid ahead'
-                    }
-                  >
-                    {priorDue > 0
-                      ? `Due Balance: ${fmt(priorDue)} AED`
-                      : `In credit: ${fmt(Math.abs(priorDue))} AED`}
-                  </p>
-                )}
+                <div className="mt-1 min-h-[20px]">
+                  {due && priorDue !== 0 ? (
+                    <p
+                      className={`text-[11px] font-bold ${priorDue > 0 ? 'text-rose-600' : 'text-brand-700'
+                        }`}
+                      title={
+                        priorDue > 0
+                          ? `Opening ${fmt(due.openingBalance)} + unpaid orders ${fmt(due.orderDue)} + unpaid bills ${fmt(due.saleDue)}${mode === 'edit' ? ', less this order' : ''
+                          }`
+                          : 'This customer has paid ahead'
+                      }
+                    >
+                      {priorDue > 0
+                        ? `Due Balance: ${fmt(priorDue)} AED`
+                        : `In credit: ${fmt(Math.abs(priorDue))} AED`}
+                    </p>
+                  ) : null}
+                </div>
               </div>
-              <Field label="Ref" className="col-span-2 sm:col-span-5">
+
+              <div className="col-span-2 sm:col-span-5">
+                <div className="mb-1 flex h-7 items-center justify-between">
+                  <label className="label mb-0">Ref</label>
+                </div>
                 <TextInput value={ref} onChange={(e) => setRef(e.target.value)} disabled={readOnly} className="font-mono" />
-              </Field>
+              </div>
 
               <Field label="Book No" className="sm:col-span-2">
                 <NumberInput value={bookNo} onChange={(e) => setBookNo(e.target.value)} disabled={readOnly} />
@@ -1050,7 +1056,21 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                               setActivePersonUid(uid);
                             }}
                             onReveal={(uid) => {
-                              setActivePersonUid(uid);
+                              let targetUid = uid;
+                              if (!targetUid || !sets.some((s) => s.uid === targetUid)) {
+                                const usedUids = new Set(items.map((it) => it.personUid).filter(Boolean));
+                                const freeSet = sets.find((s) => !usedUids.has(s.uid));
+                                if (freeSet) {
+                                  targetUid = freeSet.uid;
+                                } else {
+                                  const fresh = newSet();
+                                  targetUid = fresh.uid;
+                                  setSets((prev) => [...prev, fresh]);
+                                }
+                                updateItem(i, { personUid: targetUid });
+                              }
+                              setActivePersonUid(targetUid);
+                              setReveal({ uid: targetUid, at: Date.now() });
                             }}
                             disabled={readOnly}
                           />
