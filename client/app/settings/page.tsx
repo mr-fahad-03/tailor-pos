@@ -41,7 +41,7 @@ export default function SettingsPage() {
       // field like a line of text, and there is no whitespace in one anyway.
       company: { ...trim(form.company), logo: form.company.logo, brandLogo: form.company.brandLogo },
       bank: trim(form.bank),
-      invoiceTitle: String(form.invoiceTitle || '').trim() || 'Order Invoice',
+      invoiceTitle: String(form.invoiceTitle || '').trim() || 'Stitching Order',
     };
     save(cleaned);
     setForm(cleaned);

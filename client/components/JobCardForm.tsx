@@ -147,20 +147,18 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     // left wholly blank, so this costs nothing if it goes unused.
     return saved.length === 0 && mode === 'new' ? [newSet()] : saved;
   });
-  const [items, setItems] = useState<ItemRow[]>(() =>
-    initial?.items?.length
-      ? initial.items.map((i) => ({
+  const [items, setItems] = useState<ItemRow[]>(() => {
+    if (initial?.items?.length) {
+      return initial.items.map((i) => ({
         code: i.code ?? '',
         productName: i.productName ?? '',
         qty: String(i.qty ?? ''),
         rate: String(i.rate ?? ''),
         personUid: i.personUid ?? '',
-      }))
-      // Unattached until somebody says who it is being stitched for. Guessing
-      // the first person is right often enough to be trusted and wrong often
-      // enough to cut a garment to the wrong size.
-      : [emptyItem()],
-  );
+      }));
+    }
+    return [emptyItem(sets[0]?.uid ?? '')];
+  });
   const [discount, setDiscount] = useState(String(initial?.discount ?? '0'));
   const [additionalCharges, setAdditionalCharges] = useState(
     String(initial?.additionalCharges ?? '0'),
@@ -771,15 +769,24 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     const remainingItems = items.filter((_, idx) => idx !== i);
     setItems(remainingItems);
 
+    setSets((prevSets) => {
+      const usedUids = new Set(remainingItems.map((it) => it.personUid).filter(Boolean));
+      const filtered = prevSets.filter(
+        (s) =>
+          usedUids.has(s.uid) ||
+          s.name.trim() ||
+          Object.values(s.values).some((v) => String(v).trim()),
+      );
+
+      if (filtered.length > 0) return filtered;
+      const fresh = newSet();
+      setActivePersonUid(fresh.uid);
+      return [fresh];
+    });
+
     if (targetUid) {
-      const isStillUsed = remainingItems.some((it) => it.personUid === targetUid);
-      if (!isStillUsed) {
-        setSets((prevSets) => prevSets.filter((s) => s.uid !== targetUid));
-        if (activePersonUid === targetUid) {
-          const remainingSets = sets.filter((s) => s.uid !== targetUid);
-          setActivePersonUid(remainingSets[0]?.uid ?? '');
-        }
-      }
+      const remainingSets = sets.filter((s) => s.uid !== targetUid);
+      setActivePersonUid(remainingSets[0]?.uid ?? '');
     }
   }
 

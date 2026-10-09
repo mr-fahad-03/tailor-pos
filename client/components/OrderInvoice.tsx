@@ -174,8 +174,8 @@ export function OrderInvoice({
       </div>
 
       {/* what the sheet calls itself, over the rule that opens the body */}
-      <p className="mt-[2mm] text-[11pt] font-bold text-[#e03131] print:[print-color-adjust:exact]">
-        {settings.invoiceTitle || 'Order Invoice'}
+      <p className="mt-[2mm] text-center text-[11pt] font-bold text-[#e03131] print:[print-color-adjust:exact]">
+        {settings.invoiceTitle || 'Stitching Order'}
       </p>
       <div
         className="mt-[1mm] h-[1.5px] w-full print:[print-color-adjust:exact]"

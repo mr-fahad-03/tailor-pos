@@ -138,6 +138,12 @@ export function MeasurementSets({
     void loadProfiles();
   }, [loadProfiles]);
 
+  useEffect(() => {
+    if (sets.length === 0 && !readOnly) {
+      onChange([newSet()]);
+    }
+  }, [sets.length, readOnly, onChange]);
+
   function patch(uid: string, change: Partial<EditableSet>) {
     onChange(sets.map((s) => (s.uid === uid ? { ...s, ...change } : s)));
   }
