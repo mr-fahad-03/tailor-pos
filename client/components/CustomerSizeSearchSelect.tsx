@@ -164,13 +164,13 @@ export function CustomerSizeSearchSelect({
         )}
       </div>
 
-      <AnchoredDropdown anchorRef={wrapRef} open={open} width={440} panelRef={panelRef}>
+      <AnchoredDropdown anchorRef={wrapRef} open={open} width={415} panelRef={panelRef}>
         <div className="py-1">
           {/* Table Header Row */}
           {displayingResults.length > 0 && (
-            <div className="grid grid-cols-3 gap-2 px-3 py-1.5 text-[11px] font-bold text-ink-700 bg-ink-100/80 border-b border-ink-200 sticky top-0 z-10 select-none">
+            <div className="grid grid-cols-[1.35fr_1.65fr_1fr] gap-2 px-3 py-1.5 text-[11px] font-bold text-ink-700 bg-ink-100/80 border-b border-ink-200 sticky top-0 z-10 select-none items-center">
               <div>Measurement Name</div>
-              <div>Customer Name</div>
+              <div>Master Customer Name</div>
               <div>Phone</div>
             </div>
           )}
@@ -186,12 +186,11 @@ export function CustomerSizeSearchSelect({
                   e.preventDefault();
                   handlePick(p);
                 }}
-                className={`grid grid-cols-3 gap-2 w-full px-3 py-2 text-left text-[12px] border-b border-ink-50 last:border-b-0 transition-colors items-center ${
-                  sameCustomer ? 'bg-brand-50/70 hover:bg-brand-100/70' : 'hover:bg-ink-50'
-                }`}
+                className={`grid grid-cols-[1.35fr_1.65fr_1fr] gap-2 w-full px-3 py-2 text-left text-[12px] border-b border-ink-50 last:border-b-0 transition-colors items-center ${sameCustomer ? 'bg-brand-50/70 hover:bg-brand-100/70' : 'hover:bg-ink-50'
+                  }`}
               >
                 <div className="min-w-0 truncate font-bold text-ink-900 flex items-center gap-1.5">
-                  <span>{p.name}</span>
+                  <span className="truncate">{p.name}</span>
                   {p.stitchingStyle ? (
                     <span className="shrink-0 rounded bg-brand-100/90 px-1.5 py-0.5 text-[10px] font-semibold text-brand-800">
                       {p.stitchingStyle}

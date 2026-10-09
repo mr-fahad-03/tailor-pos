@@ -109,59 +109,66 @@ export function PersonSearchInput({
         data-form-type="other"
         data-bwignore="true"
         onChange={(e) => {
-          onChange(e.target.value);
-          setOpen(true);
+          const v = e.target.value;
+          onChange(v);
+          if (v.trim().length > 0) {
+            setOpen(true);
+          } else {
+            setOpen(false);
+          }
         }}
-        onFocus={() => setOpen(true)}
         className={className}
       />
       <AnchoredDropdown
         anchorRef={wrapRef}
         panelRef={panelRef}
-        open={open && (results.length > 0 || empty)}
-        width={352}
+        open={open && term.length > 0 && (results.length > 0 || empty)}
+        width={415}
       >
-        <>
+        <div className="py-1">
+          {/* Table Header Row */}
+          {results.length > 0 && (
+            <div className="grid grid-cols-[1.35fr_1.65fr_1fr] gap-2 px-3 py-1.5 text-[11px] font-bold text-ink-700 bg-ink-100/80 border-b border-ink-200 sticky top-0 z-10 select-none items-center">
+              <div>Measurement Name</div>
+              <div>Master Customer Name</div>
+              <div>Phone</div>
+            </div>
+          )}
+
+          {/* Render result list as table rows */}
           {results.map((p) => {
             const sameCustomer = Boolean(ledgerId) && p.ledgerId === ledgerId;
-            const filled = Object.values(p.values ?? {}).filter(Boolean).length;
             return (
               <button
                 key={p._id}
                 type="button"
-                onClick={() => {
+                onMouseDown={(e) => {
+                  e.preventDefault();
                   onPick(p);
                   setOpen(false);
                 }}
-                className="flex w-full items-start justify-between gap-3 border-b border-ink-50 px-3 py-2 text-left last:border-b-0 hover:bg-brand-50"
+                className={`grid grid-cols-[1.35fr_1.65fr_1fr] gap-2 w-full px-3 py-2 text-left text-[12px] border-b border-ink-50 last:border-b-0 transition-colors items-center ${
+                  sameCustomer ? 'bg-brand-50/70 hover:bg-brand-100/70' : 'hover:bg-ink-50'
+                }`}
               >
-                <span className="min-w-0">
-                  <span className="flex items-center gap-1.5 truncate text-[13px] font-bold text-ink-900">
-                    <span>{p.name}</span>
-                    {p.stitchingStyle ? (
-                      <span className="rounded bg-brand-100/90 px-1.5 py-0.5 text-[11px] font-semibold text-brand-800">
-                        {p.stitchingStyle}
-                      </span>
-                    ) : null}
-                  </span>
-                  {/* The owner is the whole point: it is what tells two Alis apart. */}
-                  <span className="block truncate text-[11px] text-ink-500">
-                    {p.ledgerName || 'Unknown customer'}
-                    {p.ledgerPhone ? ` · ${p.ledgerPhone}` : ''}
-                  </span>
-                </span>
-                <span className="flex shrink-0 flex-col items-end gap-1">
-                  <span className="text-[10px] font-semibold text-ink-400">{filled} fields</span>
-                  {!sameCustomer && ledgerId && (
-                    <span className="badge bg-brass-100 text-brass-800">other customer</span>
-                  )}
-                  {sameCustomer && <span className="badge bg-brand-100 text-brand-800">this customer</span>}
-                </span>
+                <div className="min-w-0 truncate font-bold text-ink-900 flex items-center gap-1.5">
+                  <span className="truncate">{p.name}</span>
+                  {p.stitchingStyle ? (
+                    <span className="shrink-0 rounded bg-brand-100/90 px-1.5 py-0.5 text-[10px] font-semibold text-brand-800">
+                      {p.stitchingStyle}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="min-w-0 truncate font-semibold text-ink-700">
+                  {p.ledgerName || '—'}
+                </div>
+                <div className="min-w-0 truncate font-mono text-[11px] text-ink-600">
+                  {p.ledgerPhone || '—'}
+                </div>
               </button>
             );
           })}
-          {/* A box that simply stays blank reads as broken. It is usually
-              just a person nobody has measured here yet, so it says so. */}
+
           {empty && (
             <div className="px-3 py-2.5">
               <p className="text-[13px] font-semibold text-ink-600">
@@ -173,12 +180,7 @@ export function PersonSearchInput({
               </p>
             </div>
           )}
-          {results.length > 0 && (
-            <p className="border-t border-ink-100 px-3 py-1.5 text-[10px] text-ink-400">
-              Picking copies their measurements onto this order
-            </p>
-          )}
-        </>
+        </div>
       </AnchoredDropdown>
     </div>
   );
