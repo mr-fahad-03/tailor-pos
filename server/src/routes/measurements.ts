@@ -67,7 +67,7 @@ measurementRouter.get(
 
     const search = String(q ?? '').trim();
     if (search) {
-      const rx = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      const rx = new RegExp('^' + search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       const matchingLedgers = await Ledger.find({
         $or: [{ name: rx }, { phone: rx }],
       }).select('_id').lean();

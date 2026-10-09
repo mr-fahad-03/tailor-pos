@@ -66,6 +66,7 @@ export function MeasurementSets({
   readOnly,
   revealToken = null,
   activeUid = '',
+  collapseSignal = 0,
 }: {
   sets: EditableSet[];
   onChange: (next: EditableSet[]) => void;
@@ -79,12 +80,22 @@ export function MeasurementSets({
   revealToken?: { uid: string; at: number } | null;
   /** Currently active item's person UID to show ONLY this set's measurements. */
   activeUid?: string;
+  collapseSignal?: number;
 }) {
   const { toast } = useToast();
   const [profiles, setProfiles] = useState<MeasurementProfile[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   /** Briefly ringed after being jumped to, so the eye finds it on arrival. */
   const [flash, setFlash] = useState('');
+
+  useEffect(() => {
+    if (!collapseSignal) return;
+    const nextCollapsed: Record<string, boolean> = {};
+    sets.forEach((s) => {
+      nextCollapsed[s.uid] = true;
+    });
+    setCollapsed(nextCollapsed);
+  }, [collapseSignal, sets]);
 
   useEffect(() => {
     if (!revealToken) return;
@@ -276,13 +287,42 @@ export function MeasurementSets({
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-base font-extrabold tracking-tight text-ink-900">Measurements</h2>
-          <p className="mt-0.5 text-xs text-ink-500">
-            {sets.length === 0
-              ? 'Add each person this order is being stitched for.'
-              : `${sets.length} ${sets.length === 1 ? 'person' : 'people'} · ${totalPieces} ${totalPieces === 1 ? 'piece' : 'pieces'}`}
-          </p>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const allShut = sets.length > 0 && sets.every((s) => collapsed[s.uid]);
+              const nextState: Record<string, boolean> = {};
+              sets.forEach((s) => {
+                nextState[s.uid] = !allShut;
+              });
+              setCollapsed(nextState);
+            }}
+            aria-label="Toggle collapse measurements"
+            title="Expand / Collapse measurements"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-500 transition hover:bg-ink-100 hover:text-ink-800"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.25"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`h-4 w-4 transition-transform ${
+                sets.length > 0 && sets.every((s) => collapsed[s.uid]) ? '-rotate-90' : ''
+              }`}
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          <div>
+            <h2 className="text-base font-extrabold tracking-tight text-ink-900">Measurements</h2>
+            <p className="mt-0.5 text-xs text-ink-500">
+              {sets.length === 0
+                ? 'Add each person this order is being stitched for.'
+                : `${sets.length} ${sets.length === 1 ? 'person' : 'people'} · ${totalPieces} ${totalPieces === 1 ? 'piece' : 'pieces'}`}
+            </p>
+          </div>
         </div>
         {/* Who this customer has on file sits beside Add person in a searchable dropdown. */}
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
@@ -354,24 +394,6 @@ export function MeasurementSets({
                       ? 'border-emerald-200 bg-emerald-50/40'
                       : 'border-ink-100'
                   }`}>
-                    <button
-                      onClick={() => setCollapsed((c) => ({ ...c, [s.uid]: !isShut }))}
-                      aria-label={isShut ? 'Expand' : 'Collapse'}
-                      aria-expanded={!isShut}
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-400 transition hover:bg-ink-100 hover:text-ink-700"
-                    >
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.25"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className={`h-3.5 w-3.5 transition-transform ${isShut ? '-rotate-90' : ''}`}
-                      >
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
-                    </button>
                     <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded font-mono text-[11px] font-bold transition-colors ${
                       isHighlighted
                         ? 'bg-emerald-600 text-white shadow-sm'

@@ -171,6 +171,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     initial?.measurements?.FABRIC_CONSUMPTION ?? '',
   );
   const [jobCost, setJobCost] = useState(String(initial?.jobCost ?? '0'));
+  const [collapseSignal, setCollapseSignal] = useState(0);
 
   // ---- payment panel ----
   const [paymentMode, setPaymentMode] = useState<'cash' | 'bank' | 'card'>(
@@ -441,6 +442,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
           ),
         );
         toast(`${keep.length} ${keep.length === 1 ? 'person' : 'people'} kept on file`);
+        setCollapseSignal(Date.now());
       }
       // The next person, and the line that will be stitched for them.
       const next = newSet();
@@ -762,6 +764,25 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     }, 50);
   }
 
+  function removeItem(i: number) {
+    const targetItem = items[i];
+    const targetUid = targetItem?.personUid;
+
+    const remainingItems = items.filter((_, idx) => idx !== i);
+    setItems(remainingItems);
+
+    if (targetUid) {
+      const isStillUsed = remainingItems.some((it) => it.personUid === targetUid);
+      if (!isStillUsed) {
+        setSets((prevSets) => prevSets.filter((s) => s.uid !== targetUid));
+        if (activePersonUid === targetUid) {
+          const remainingSets = sets.filter((s) => s.uid !== targetUid);
+          setActivePersonUid(remainingSets[0]?.uid ?? '');
+        }
+      }
+    }
+  }
+
   async function searchFind() {
     try {
       const r = await api.jobCards.list(findQ, '', 1, 10);
@@ -1080,7 +1101,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                           <td className="td w-10 text-center">
                             <button
                               className="text-rose-500 hover:text-rose-700"
-                              onClick={() => setItems((rows) => rows.filter((_, idx) => idx !== i))}
+                              onClick={() => removeItem(i)}
                               title="Remove row"
                             >
                               ✕
@@ -1104,6 +1125,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
               readOnly={readOnly}
               revealToken={reveal}
               activeUid={activePersonUid}
+              collapseSignal={collapseSignal}
             />
 
             {/* What the order cost against what it sells for, read down the

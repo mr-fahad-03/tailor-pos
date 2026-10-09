@@ -76,9 +76,26 @@ export function PersonSearchInput({
           ? await api.measurements.search(term, 1, 10)
           : await api.measurements.list(ledgerId!);
         if (dropped) return;
+        let list = r.items;
+        if (term) {
+          const tLower = term.toLowerCase();
+          list = list.filter((p) => {
+            const n = (p.name ?? '').trim().toLowerCase();
+            const s = (p.stitchingStyle ?? '').trim().toLowerCase();
+            const c = (p.ledgerName ?? '').trim().toLowerCase();
+            const phone = (p.ledgerPhone ?? '').trim().toLowerCase();
+            return (
+              n.startsWith(tLower) ||
+              n.split(/\s+/).some((w) => w.startsWith(tLower)) ||
+              s.startsWith(tLower) ||
+              c.startsWith(tLower) ||
+              phone.startsWith(tLower)
+            );
+          });
+        }
         // This order's own customer first; everyone else after.
-        const mine = r.items.filter((p) => ledgerId && p.ledgerId === ledgerId);
-        const others = r.items.filter((p) => !ledgerId || p.ledgerId !== ledgerId);
+        const mine = list.filter((p) => ledgerId && p.ledgerId === ledgerId);
+        const others = list.filter((p) => !ledgerId || p.ledgerId !== ledgerId);
         setResults([...mine, ...others]);
       } catch {
         if (dropped) return;

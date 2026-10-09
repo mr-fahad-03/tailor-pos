@@ -350,11 +350,6 @@ export function OrderInvoice({
             {cardPaid > 0 && <TotalRow en="Card Amount" ar="مبلغ البطاقة" value={`AED ${fmt(cardPaid)}`} />}
             {bankPaid > 0 && <TotalRow en="Transfer Amount" ar="تحويل بنكي" value={`AED ${fmt(bankPaid)}`} />}
             <TotalRow en="Due Amount" ar="المبلغ المستحق" value={`AED ${fmt(card.balance)}`} />
-            <TotalRow
-              en="Additional Charges"
-              ar="رسوم إضافية"
-              value={`AED ${fmt(card.additionalCharges)}`}
-            />
           </tbody>
         </table>
 
@@ -362,6 +357,11 @@ export function OrderInvoice({
           <table className="w-full border-collapse">
             <tbody>
               <TotalRow en="Total-Without Vat" ar="المجموع الفرعي" value={`AED ${fmt(card.total)}`} />
+              <TotalRow
+                en="Additional Charges"
+                ar="رسوم إضافية"
+                value={`AED ${fmt(card.additionalCharges)}`}
+              />
               <TotalRow en="Discount" ar="الخصم" value={`AED ${fmt(card.discount)}`} />
               <TotalRow
                 en="Total Before Tax"
