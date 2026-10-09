@@ -280,7 +280,7 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
     const charged = rows.filter((r) => r.productName?.trim() || r.amount > 0);
     const itemCount = charged.length;
     const qtyCount = r2(charged.reduce((s, r) => s + r.qty, 0));
-    return { rows, total, additionalCharges: extra, discount: d, tax, netAmount, advance, advanceBeforeTax, advanceTax, balance, materialTotal, itemCount, qtyCount };
+    return { rows, total, additionalCharges: extra, discount: d, taxable, tax, netAmount, advance, advanceBeforeTax, advanceTax, balance, materialTotal, itemCount, qtyCount };
   }, [items, discount, additionalCharges, payments, sets, taxRate]);
 
   /**
@@ -1206,6 +1206,10 @@ export function JobCardForm({ initial, mode }: { initial?: JobCard | null; mode:
                 />
               </div>
               <div className="flex items-center justify-between border-t border-ink-100 pt-1.5">
+                <span className="font-medium text-ink-500">Total Before Tax</span>
+                <span className="font-bold tabular-nums">{fmt(calc.taxable)} AED</span>
+              </div>
+              <div className="flex items-center justify-between">
                 <span className="font-medium text-ink-500">Tax ({taxRate}% VAT)</span>
                 <span className="font-bold tabular-nums">+ {fmt(calc.tax)} AED</span>
               </div>

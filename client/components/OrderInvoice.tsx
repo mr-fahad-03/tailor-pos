@@ -44,9 +44,8 @@ function DetailRow({
         {en}:
       </td>
       <td
-        className={`py-[2px] pr-2 align-top text-[7.5pt] font-semibold [overflow-wrap:anywhere] ${
-          wide ? '' : 'w-full'
-        }`}
+        className={`py-[2px] pr-2 align-top text-[7.5pt] font-semibold [overflow-wrap:anywhere] ${wide ? '' : 'w-full'
+          }`}
       >
         {value || '—'}
       </td>
@@ -105,7 +104,12 @@ export function OrderInvoice({
     Math.round((card.total + card.additionalCharges - card.discount) * 100) / 100;
 
   /** How this order was actually settled, rather than what was planned. */
-  const modes = Array.from(new Set((card.payments ?? []).map((p) => p.mode)));
+  const paymentsList = card.payments ?? [];
+  const cashPaid = paymentsList.filter((p) => p.mode === 'cash').reduce((s, p) => s + (p.amount || 0), 0);
+  const cardPaid = paymentsList.filter((p) => p.mode === 'card').reduce((s, p) => s + (p.amount || 0), 0);
+  const bankPaid = paymentsList.filter((p) => p.mode === 'bank').reduce((s, p) => s + (p.amount || 0), 0);
+
+  const modes = Array.from(new Set(paymentsList.map((p) => p.mode)));
   const paymentMethod = modes.length
     ? modes.map((m) => (m === 'bank' ? 'Bank Transfer' : m === 'card' ? 'Card' : 'Cash')).join(' + ')
     : 'Unpaid';
@@ -228,67 +232,110 @@ export function OrderInvoice({
             style={{ backgroundColor: GREEN }}
           >
             <th
-              className="border px-[2mm] py-[2mm] text-center text-[7.5pt] font-bold uppercase"
+              className="w-[10mm] border border-white/40 px-[1.5mm] py-[2mm] text-center text-[7pt] font-bold uppercase"
               style={cell}
             >
-              <Head en="Product Name" ar="اسم المنتج" />
+              <Head en="S.NO" ar="الرقم" />
             </th>
             <th
-              className="w-[22mm] border px-[2mm] py-[2mm] text-center text-[7pt] font-bold uppercase"
+              className="border border-white/40 px-[2mm] py-[2mm] text-center text-[7.5pt] font-bold uppercase"
               style={cell}
             >
-              <Head en="U.Price AED" ar="سعر الوحدة" />
+              <Head en="PRODUCT NAME" ar="اسم المنتج" />
             </th>
             <th
-              className="w-[22mm] border px-[2mm] py-[2mm] text-center text-[7pt] font-bold uppercase"
+              className="w-[20mm] border border-white/40 px-[1.5mm] py-[2mm] text-center text-[7pt] font-bold uppercase"
               style={cell}
             >
-              <Head en="Quantity" ar="الكمية" />
+              <Head en="U.PRICE AED" ar="سعر الوحدة" />
             </th>
             <th
-              className="w-[24mm] border px-[2mm] py-[2mm] text-center text-[7pt] font-bold uppercase"
+              className="w-[18mm] border border-white/40 px-[1.5mm] py-[2mm] text-center text-[7pt] font-bold uppercase"
               style={cell}
             >
-              <Head en="Total AED" ar="الإجمالي" />
+              <Head en="QUANTITY" ar="الكمية" />
+            </th>
+            <th
+              className="w-[24mm] border border-white/40 px-[1.5mm] py-[2mm] text-center text-[6.5pt] font-bold uppercase"
+              style={cell}
+            >
+              <Head en="Total without vat" ar="الإجمالي" />
+            </th>
+            <th
+              className="w-[22mm] border border-white/40 px-[1.5mm] py-[2mm] text-center text-[6.5pt] font-bold uppercase"
+              style={cell}
+            >
+              <Head en="Vat Amount" ar="ضريبة" />
+            </th>
+            <th
+              className="w-[24mm] border border-white/40 px-[1.5mm] py-[2mm] text-center text-[6.5pt] font-bold uppercase"
+              style={cell}
+            >
+              <Head en="Total with vat" ar="الإجمالي مع الضريبة" />
             </th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={4} className="border px-[2mm] py-[6mm] text-center text-neutral-500" style={cell}>
+              <td colSpan={7} className="border px-[2mm] py-[6mm] text-center text-neutral-500" style={cell}>
                 No items on this order.
               </td>
             </tr>
           ) : (
-            rows.map((r, i) => (
-              <tr key={i}>
-                <td
-                  className="border px-[2mm] py-[2mm] align-top text-[7.5pt] [overflow-wrap:anywhere]"
-                  style={cell}
-                >
-                  {r.productName}
-                </td>
-                <td
-                  className="border px-[2mm] py-[2mm] text-center align-top text-[7.5pt] tabular-nums"
-                  style={cell}
-                >
-                  {fmt(r.rate)}
-                </td>
-                <td
-                  className="border px-[2mm] py-[2mm] text-center align-top text-[7.5pt] tabular-nums"
-                  style={cell}
-                >
-                  {fmt(r.qty)} Pc
-                </td>
-                <td
-                  className="border px-[2mm] py-[2mm] text-center align-top text-[7.5pt] tabular-nums"
-                  style={cell}
-                >
-                  {fmt(r.amount)}
-                </td>
-              </tr>
-            ))
+            rows.map((r, i) => {
+              const taxRate = settings.taxRate ?? 5;
+              const lineTotalWithoutVat = Math.round(r.amount * 100) / 100;
+              const lineVat = Math.round((lineTotalWithoutVat * (taxRate / 100)) * 100) / 100;
+              const lineTotalWithVat = Math.round((lineTotalWithoutVat + lineVat) * 100) / 100;
+
+              return (
+                <tr key={i}>
+                  <td
+                    className="border px-[1.5mm] py-[2mm] text-center align-top text-[7.5pt] tabular-nums"
+                    style={cell}
+                  >
+                    {i + 1}
+                  </td>
+                  <td
+                    className="border px-[2mm] py-[2mm] align-top text-[7.5pt] [overflow-wrap:anywhere]"
+                    style={cell}
+                  >
+                    {r.productName}
+                  </td>
+                  <td
+                    className="border px-[1.5mm] py-[2mm] text-center align-top text-[7.5pt] tabular-nums"
+                    style={cell}
+                  >
+                    {fmt(r.rate)}
+                  </td>
+                  <td
+                    className="border px-[1.5mm] py-[2mm] text-center align-top text-[7.5pt] tabular-nums"
+                    style={cell}
+                  >
+                    {fmt(r.qty)} Pc
+                  </td>
+                  <td
+                    className="border px-[1.5mm] py-[2mm] text-center align-top text-[7.5pt] tabular-nums"
+                    style={cell}
+                  >
+                    {fmt(lineTotalWithoutVat)}
+                  </td>
+                  <td
+                    className="border px-[1.5mm] py-[2mm] text-center align-top text-[7.5pt] tabular-nums"
+                    style={cell}
+                  >
+                    {fmt(lineVat)}
+                  </td>
+                  <td
+                    className="border px-[1.5mm] py-[2mm] text-center align-top text-[7.5pt] tabular-nums"
+                    style={cell}
+                  >
+                    {fmt(lineTotalWithVat)}
+                  </td>
+                </tr>
+              );
+            })
           )}
         </tbody>
       </table>
@@ -299,6 +346,9 @@ export function OrderInvoice({
         <table className="w-full border-collapse">
           <tbody>
             <TotalRow en="Paid Amount" ar="المبلغ المدفوع" value={`AED ${fmt(card.advance)}`} />
+            {cashPaid > 0 && <TotalRow en="Cash Amount" ar="مبلغ نقدي" value={`AED ${fmt(cashPaid)}`} />}
+            {cardPaid > 0 && <TotalRow en="Card Amount" ar="مبلغ البطاقة" value={`AED ${fmt(cardPaid)}`} />}
+            {bankPaid > 0 && <TotalRow en="Transfer Amount" ar="تحويل بنكي" value={`AED ${fmt(bankPaid)}`} />}
             <TotalRow en="Due Amount" ar="المبلغ المستحق" value={`AED ${fmt(card.balance)}`} />
             <TotalRow
               en="Additional Charges"
@@ -311,16 +361,13 @@ export function OrderInvoice({
         <div>
           <table className="w-full border-collapse">
             <tbody>
-              <TotalRow en="Subtotal" ar="المجموع الفرعي" value={`AED ${fmt(card.total)}`} />
+              <TotalRow en="Total-Without Vat" ar="المجموع الفرعي" value={`AED ${fmt(card.total)}`} />
               <TotalRow en="Discount" ar="الخصم" value={`AED ${fmt(card.discount)}`} />
               <TotalRow
-                en="After Discount"
-                ar="المبلغ بعد الخصم"
+                en="Total Before Tax"
+                ar="المبلغ قبل الضريبة"
                 value={`AED ${fmt(afterDiscount)}`}
               />
-              {/* Shown rather than folded in: without it the net figure does
-                  not follow from the ones above, and a UAE invoice has to say
-                  what tax was charged. */}
               <TotalRow
                 en={`VAT ${settings.taxRate}%`}
                 ar="ضريبة القيمة المضافة"
